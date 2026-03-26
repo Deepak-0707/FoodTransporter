@@ -1,4 +1,3 @@
-// src/pages/EventListPage.jsx
 import React, { useEffect, useState } from 'react';
 import { eventsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';

@@ -1,5 +1,3 @@
-// controllers/authController.js
-// Handles user registration and login
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');

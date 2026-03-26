@@ -1,9 +1,21 @@
-# docker-compose.yml
-# Run the full FoodBridge stack locally with one command: docker compose up --build
 version: '3.9'
 
 services:
-  # ─── Backend (Express API) ───────────────────────────────────────────────────
+  # ─── Database (PostgreSQL) ───────────────────────────────────────────────
+  db:
+    image: postgres:15
+    container_name: foodbridge_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: foodbridge
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # ─── Backend (Express API) ───────────────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -11,14 +23,14 @@ services:
     container_name: foodbridge_backend
     ports:
       - "5000:5000"
+    env_file:
+      - ./backend/.env
     environment:
       - PORT=5000
       - NODE_ENV=production
-      - DATABASE_URL=${DATABASE_URL}
-      - JWT_SECRET=${JWT_SECRET}
-      - CLIENT_URL=http://localhost:3000
-    env_file:
-      - ./backend/.env
+      - CLIENT_URL=http://localhost:3001
+    depends_on:
+      - db
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:5000/health"]
@@ -26,7 +38,7 @@ services:
       timeout: 5s
       retries: 3
 
-  # ─── Frontend (React + Nginx) ────────────────────────────────────────────────
+  # ─── Frontend (React + Nginx) ────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -35,7 +47,7 @@ services:
         - VITE_API_URL=http://localhost:5000
     container_name: foodbridge_frontend
     ports:
-      - "3000:80"
+      - "3001:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -44,3 +56,6 @@ services:
 networks:
   default:
     name: foodbridge_network
+
+volumes:
+  postgres_data:

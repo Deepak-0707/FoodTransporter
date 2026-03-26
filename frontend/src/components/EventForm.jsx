@@ -1,5 +1,3 @@
-// src/components/EventForm.jsx
-// Reusable form used by both CreateEventPage and EditEventPage
 import React, { useState } from 'react';
 
 const defaultForm = {

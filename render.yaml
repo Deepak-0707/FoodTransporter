@@ -1,7 +1,3 @@
-# render.yaml
-# Render Blueprint — deploy backend as a free Web Service
-# Docs: https://render.com/docs/blueprint-spec
-
 services:
   - type: web
     name: foodbridge-backend

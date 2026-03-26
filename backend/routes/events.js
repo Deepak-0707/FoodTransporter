@@ -1,31 +1,38 @@
-// routes/events.js
 const express = require('express');
-const router = express.Router();
+const router  = express.Router();
 const { authenticate, requireRole } = require('../middleware/auth');
 const {
   createEvent,
   getEvents,
+  getNearbyEvents,
   getEventById,
   updateEvent,
   deleteEvent,
 } = require('../controllers/eventController');
+const { getEventBookings } = require('../controllers/bookingController');
 
 // All event routes require authentication
 router.use(authenticate);
 
-// GET /events — all authenticated users can view events
+// GET /events/nearby — must be before /:id to avoid route collision
+router.get('/nearby', getNearbyEvents);
+
+// GET /events — all authenticated users
 router.get('/', getEvents);
 
-// GET /events/:id — view single event details
+// GET /events/:id — single event
 router.get('/:id', getEventById);
 
-// POST /events — only ORGANIZERs can create events
+// GET /events/:id/bookings — organizer views bookings for their event
+router.get('/:id/bookings', requireRole('ORGANIZER'), getEventBookings);
+
+// POST /events — organizer only
 router.post('/', requireRole('ORGANIZER'), createEvent);
 
-// PUT /events/:id — only ORGANIZERs can update (ownership verified in controller)
+// PUT /events/:id — organizer only
 router.put('/:id', requireRole('ORGANIZER'), updateEvent);
 
-// DELETE /events/:id — only ORGANIZERs can delete (ownership verified in controller)
+// DELETE /events/:id — organizer only
 router.delete('/:id', requireRole('ORGANIZER'), deleteEvent);
 
 module.exports = router;

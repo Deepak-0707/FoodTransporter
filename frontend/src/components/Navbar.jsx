@@ -1,93 +1,86 @@
-// src/components/Navbar.jsx
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate         = useNavigate();
+  const location         = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const isNGO = user?.role === 'NGO';
+  const isOrganizer = user?.role === 'ORGANIZER';
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) =>
+    location.pathname === path || location.pathname.startsWith(path + '/');
 
-  const navLink = (to, label) => (
-    <Link
-      to={to}
-      onClick={() => setMenuOpen(false)}
-      className={`text-sm font-medium transition-colors duration-150 ${
-        isActive(to)
-          ? 'text-brand-500'
-          : 'text-stone-600 hover:text-stone-900'
-      }`}
-    >
-      {label}
-    </Link>
-  );
+  const linkCls = (path) =>
+    `text-sm font-medium transition-colors ${
+      isActive(path)
+        ? 'text-brand-600'
+        : 'text-stone-600 hover:text-stone-900'
+    }`;
 
   return (
-    <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-stone-100 shadow-sm">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-
+    <nav className="bg-white border-b border-stone-100 sticky top-0 z-50">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
         {/* Logo */}
-        <Link to="/dashboard" className="flex items-center gap-2 group">
-          <span className="text-2xl">🍱</span>
-          <span className="font-display font-bold text-xl text-stone-900 group-hover:text-brand-600 transition-colors">
-            FoodBridge
-          </span>
+        <Link to="/dashboard" className="font-display font-bold text-xl text-stone-900 shrink-0">
+          🍱 FoodBridge
         </Link>
 
-        {/* Desktop Nav */}
+        {/* Desktop links */}
         <div className="hidden sm:flex items-center gap-6">
-          {navLink('/dashboard', 'Dashboard')}
-          {navLink('/events', 'Events')}
-          {navLink('/map', 'Map')}
-          {user?.role === 'ORGANIZER' && navLink('/events/new', '+ New Event')}
+          <Link to="/dashboard" className={linkCls('/dashboard')}>Dashboard</Link>
+          <Link to="/events"    className={linkCls('/events')}>Events</Link>
+          <Link to="/map"       className={linkCls('/map')}>Map</Link>
+          {isNGO && (
+            <Link to="/bookings" className={linkCls('/bookings')}>My Bookings</Link>
+          )}
         </div>
 
-        {/* User Menu */}
+        {/* Right side */}
         <div className="hidden sm:flex items-center gap-3">
-          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-            user?.role === 'ORGANIZER'
-              ? 'bg-brand-100 text-brand-700'
-              : 'bg-forest-100 text-forest-700'
-          }`}>
+          <span className="text-xs bg-stone-100 text-stone-600 px-2.5 py-1 rounded-full font-medium">
             {user?.role}
           </span>
-          <span className="text-sm text-stone-600 font-medium">{user?.name}</span>
+          <span className="text-sm text-stone-500 max-w-[120px] truncate">{user?.name}</span>
           <button
             onClick={handleLogout}
-            className="text-sm text-red-500 hover:text-red-700 font-medium transition-colors"
+            className="btn-secondary text-sm py-1.5 px-3"
           >
             Logout
           </button>
         </div>
 
-        {/* Mobile Hamburger */}
+        {/* Mobile hamburger */}
         <button
-          className="sm:hidden p-2 rounded-lg text-stone-600 hover:bg-stone-100"
-          onClick={() => setMenuOpen(!menuOpen)}
+          className="sm:hidden p-2 rounded-lg text-stone-500 hover:bg-stone-100"
+          onClick={() => setMenuOpen((o) => !o)}
           aria-label="Toggle menu"
         >
           {menuOpen ? '✕' : '☰'}
         </button>
       </div>
 
-      {/* Mobile Menu */}
+      {/* Mobile menu */}
       {menuOpen && (
-        <div className="sm:hidden border-t border-stone-100 bg-white px-4 py-4 flex flex-col gap-4 animate-fade-up">
-          {navLink('/dashboard', 'Dashboard')}
-          {navLink('/events', 'Events')}
-          {navLink('/map', 'Map')}
-          {user?.role === 'ORGANIZER' && navLink('/events/new', '+ New Event')}
-          <div className="pt-2 border-t border-stone-100 flex items-center justify-between">
-            <span className="text-sm text-stone-500">{user?.name} · {user?.role}</span>
-            <button onClick={handleLogout} className="text-sm text-red-500 font-medium">Logout</button>
+        <div className="sm:hidden border-t border-stone-100 bg-white px-4 py-3 flex flex-col gap-3">
+          <Link to="/dashboard" className="text-sm font-medium text-stone-700" onClick={() => setMenuOpen(false)}>Dashboard</Link>
+          <Link to="/events"    className="text-sm font-medium text-stone-700" onClick={() => setMenuOpen(false)}>Events</Link>
+          <Link to="/map"       className="text-sm font-medium text-stone-700" onClick={() => setMenuOpen(false)}>Map</Link>
+          {isNGO && (
+            <Link to="/bookings" className="text-sm font-medium text-stone-700" onClick={() => setMenuOpen(false)}>My Bookings</Link>
+          )}
+          <hr className="border-stone-100" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-stone-500">{user?.name} · {user?.role}</span>
+            <button onClick={handleLogout} className="btn-secondary text-sm py-1.5 px-3">Logout</button>
           </div>
         </div>
       )}

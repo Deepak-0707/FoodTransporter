@@ -1,5 +1,3 @@
-// middleware/auth.js
-// JWT verification middleware — protects routes that require authentication
 const jwt = require('jsonwebtoken');
 
 /**

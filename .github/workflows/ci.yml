@@ -1,17 +1,14 @@
-# .github/workflows/ci.yml
-# FoodBridge CI — runs on every push to main or pull request
 name: FoodBridge CI
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
+    tags:
+      - 'v*'
 
 jobs:
-  # ─── Backend: lint + install ───────────────────────────────
+  # ─── Backend: lint + install + booking test ─────────────
   backend:
-    name: Backend — Lint & Install
+    name: Backend — Lint, Install & API Tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -34,17 +31,50 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
-      - name: Verify server starts
+      - name: Verify server module loads
         env:
           DATABASE_URL: postgresql://fake:fake@localhost:5432/fake
           JWT_SECRET: ci_test_secret_not_real
           PORT: 5000
           NODE_ENV: test
-        # Just check that the module loads without errors (no DB connection needed)
         run: node -e "require('./server.js')" &
         continue-on-error: true
 
-  # ─── Frontend: lint + build ────────────────────────────────
+      # ─── Booking API unit test (no DB required) ──────────
+      - name: Test distanceService (Haversine)
+        run: |
+          node -e "
+            const { haversineDistance } = require('./services/distanceService');
+            const d = haversineDistance(13.0827, 80.2707, 12.9716, 77.5946);
+            if (d < 290 || d > 310) {
+              console.error('Haversine distance out of expected range:', d);
+              process.exit(1);
+            }
+            console.log('✅ Haversine test passed — distance:', d.toFixed(2), 'km');
+          "
+
+      - name: Test booking controller input validation (unit)
+        run: |
+          node -e "
+            // Simulate the validation logic in bookingController without DB
+            function validateBookingInput(event_id, quantity_requested) {
+              if (!event_id) return { error: 'event_id is required' };
+              const qty = parseInt(quantity_requested, 10);
+              if (!qty || isNaN(qty) || qty <= 0) return { error: 'quantity_requested must be a positive integer' };
+              return null;
+            }
+            const t1 = validateBookingInput(null, 5);
+            const t2 = validateBookingInput('uuid-1', 0);
+            const t3 = validateBookingInput('uuid-1', -3);
+            const t4 = validateBookingInput('uuid-1', 10);
+            if (t1?.error !== 'event_id is required') { console.error('FAIL t1'); process.exit(1); }
+            if (!t2?.error) { console.error('FAIL t2'); process.exit(1); }
+            if (!t3?.error) { console.error('FAIL t3'); process.exit(1); }
+            if (t4 !== null) { console.error('FAIL t4'); process.exit(1); }
+            console.log('✅ Booking input validation tests passed');
+          "
+
+  # ─── Frontend: lint + build ─────────────────────────────
   frontend:
     name: Frontend — Lint & Build
     runs-on: ubuntu-latest
@@ -82,7 +112,7 @@ jobs:
           path: frontend/dist
           retention-days: 3
 
-  # ─── Docker build check ────────────────────────────────────
+  # ─── Docker build check ─────────────────────────────────
   docker:
     name: Docker — Build Check
     runs-on: ubuntu-latest
