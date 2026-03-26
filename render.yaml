@@ -1,0 +1,23 @@
+# render.yaml
+# Render Blueprint — deploy backend as a free Web Service
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: foodbridge-backend
+    env: node
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false        # Set this manually in Render dashboard
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_URL
+        sync: false        # Set to your Vercel frontend URL
