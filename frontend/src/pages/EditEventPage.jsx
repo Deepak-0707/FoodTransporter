@@ -1,72 +1,105 @@
-// src/pages/EditEventPage.jsx
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { eventsAPI } from '../services/api';
 import PageLayout from '../components/PageLayout';
-import EventForm from '../components/EventForm';
+
+const UNIT_OPTIONS = ['kg', 'meals', 'portions', 'litres', 'boxes', 'bags', 'units'];
 
 export default function EditEventPage() {
-  const { id }    = useParams();
-  const navigate  = useNavigate();
-
-  const [event, setEvent]     = useState(null);
+  const { id }   = useParams();
+  const navigate = useNavigate();
+  const [form, setForm]     = useState(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving]   = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError]     = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
 
   useEffect(() => {
-    eventsAPI.getById(id)
-      .then((res) => setEvent(res.data.event))
-      .catch(() => setError('Event not found or you do not have permission to edit it.'))
-      .finally(() => setLoading(false));
+    eventsAPI.getById(id).then((res) => {
+      const e = res.data.event;
+      setForm({
+        title:         e.title,
+        description:   e.description || '',
+        latitude:      e.latitude,
+        longitude:     e.longitude,
+        quantity:      e.quantity,
+        quantity_unit: e.quantity_unit || 'kg',
+        expiry_time:   new Date(e.expiry_time).toISOString().slice(0, 16),
+      });
+    }).catch(() => setError('Event not found')).finally(() => setLoading(false));
   }, [id]);
 
-  const handleSubmit = async (formData) => {
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (isNaN(parseInt(form.quantity)) || parseInt(form.quantity) <= 0) {
+      return setError('Quantity must be a positive whole number.');
+    }
     setSaving(true);
     try {
-      await eventsAPI.update(id, formData);
-      setSuccess(true);
-      setTimeout(() => navigate(`/events/${id}`), 1500);
+      await eventsAPI.update(id, form);
+      navigate(`/events/${id}`);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update event');
     } finally {
       setSaving(false);
     }
   };
 
-  // Pre-format expiry_time for datetime-local input (ISO string without seconds)
-  const initialValues = event
-    ? {
-        ...event,
-        expiry_time: new Date(event.expiry_time).toISOString().slice(0, 16),
-      }
-    : {};
+  if (loading) return <PageLayout><div className="text-stone-400 py-16 text-center animate-pulse-soft">Loading…</div></PageLayout>;
+  if (error && !form) return <PageLayout><div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3">{error}</div></PageLayout>;
 
   return (
-    <PageLayout title="Edit Event" subtitle="Update the details of your food surplus event.">
-      <div className="max-w-xl mx-auto">
-        <Link to={`/events/${id}`} className="text-sm text-stone-500 hover:text-stone-700 flex items-center gap-1 mb-6">
-          ← Back to Event
-        </Link>
-
-        {loading && <div className="text-stone-400 animate-pulse-soft py-12 text-center">Loading…</div>}
-        {error   && <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3">{error}</div>}
-
-        {success && (
-          <div className="bg-forest-50 border border-forest-200 text-forest-700 text-sm rounded-xl px-4 py-3 mb-6 font-medium">
-            ✅ Event updated! Redirecting…
-          </div>
+    <PageLayout title="Edit Event" subtitle="Update the details of your food event.">
+      <div className="max-w-lg mx-auto card p-8">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3 mb-6 text-sm">⚠️ {error}</div>
         )}
-
-        {!loading && !error && (
-          <div className="card p-8">
-            <EventForm
-              initialValues={initialValues}
-              onSubmit={handleSubmit}
-              loading={saving}
-              submitLabel="Save Changes"
-            />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1.5">Title *</label>
+            <input type="text" value={form.title} onChange={set('title')} className="input-field" required />
           </div>
-        )}
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1.5">Description</label>
+            <textarea value={form.description} onChange={set('description')} rows={3} className="input-field resize-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1.5">Quantity *</label>
+              <input type="number" min="1" value={form.quantity} onChange={set('quantity')} className="input-field" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1.5">Unit *</label>
+              <select value={form.quantity_unit} onChange={set('quantity_unit')} className="input-field">
+                {UNIT_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1.5">Latitude *</label>
+              <input type="number" step="any" value={form.latitude} onChange={set('latitude')} className="input-field" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1.5">Longitude *</label>
+              <input type="number" step="any" value={form.longitude} onChange={set('longitude')} className="input-field" required />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1.5">Expiry Date & Time *</label>
+            <input type="datetime-local" value={form.expiry_time} onChange={set('expiry_time')} className="input-field" required />
+          </div>
+          <div className="flex gap-3 mt-2">
+            <button type="submit" disabled={saving} className="btn-primary flex-1">
+              {saving ? '⏳ Saving…' : '✅ Save Changes'}
+            </button>
+            <button type="button" onClick={() => navigate(`/events/${id}`)} className="btn-secondary">
+              Cancel
+            </button>
+          </div>
+        </form>
       </div>
     </PageLayout>
   );

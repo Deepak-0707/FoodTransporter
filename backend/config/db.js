@@ -1,5 +1,3 @@
-// config/db.js
-// PostgreSQL connection pool using Supabase (or any PG connection string)
 const { Pool } = require('pg');
 
 const pool = new Pool({

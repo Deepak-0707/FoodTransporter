@@ -1,5 +1,3 @@
-# Backend Dockerfile
-# Multi-stage build for production efficiency
 FROM node:20-alpine AS base
 
 WORKDIR /app
