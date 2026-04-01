@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { bookingsAPI } from '../services/api';
+import { requestsAPI } from '../services/api';
 
 /**
  * BookingForm

@@ -1,3 +1,4 @@
+// src/services/api.js — Phase 3: requests + allocation APIs
 import axios from 'axios';
 
 const api = axios.create({
@@ -41,13 +42,14 @@ export const eventsAPI = {
   create:    (data)         => api.post('/events', data),
   update:    (id, data)     => api.put(`/events/${id}`, data),
   remove:    (id)           => api.delete(`/events/${id}`),
-  getBookings: (id)         => api.get(`/events/${id}/bookings`),
+  getRequests: (id)         => api.get(`/events/${id}/requests`),
+  allocate:    (id)         => api.post(`/events/${id}/allocate`),
 };
 
-// ─── Bookings ────────────────────────────────────────────────
-export const bookingsAPI = {
-  create:  (data) => api.post('/bookings', data),
-  getMine: ()     => api.get('/bookings/my'),
+// ─── Requests (Phase 3: replaces bookings) ───────────────────
+export const requestsAPI = {
+  create:  (data) => api.post('/requests', data),
+  getMine: ()     => api.get('/requests/my'),
 };
 
 export default api;

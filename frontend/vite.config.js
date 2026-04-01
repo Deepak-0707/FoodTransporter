@@ -8,20 +8,24 @@ export default defineConfig({
     // Proxy API calls to backend in development
     proxy: {
       '/auth': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5001',
         changeOrigin: true,
       },
       '/events': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5001',
         changeOrigin: true,
       },
       '/bookings': {   // ← ADD THIS
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5001',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5001',
         changeOrigin: true,
+      },
+      '/requests':{
+        target:'http://localhost:5001',
+        changeOrigin:true,
       },
     },
   },

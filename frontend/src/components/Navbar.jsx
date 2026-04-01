@@ -1,87 +1,109 @@
+// src/components/Navbar.jsx — Phase 3
 import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
-  const navigate         = useNavigate();
-  const location         = useLocation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const isNGO = user?.role === 'NGO';
-  const isOrganizer = user?.role === 'ORGANIZER';
+  const handleLogout = () => { logout(); navigate('/login'); };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+  const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
 
-  const isActive = (path) =>
-    location.pathname === path || location.pathname.startsWith(path + '/');
+  const ngoLinks = [
+    { to: '/dashboard', label: 'Dashboard' },
+    { to: '/events',    label: 'Events' },
+    { to: '/requests',  label: 'My Requests' },
+    { to: '/map',       label: 'Map' },
+  ];
 
-  const linkCls = (path) =>
-    `text-sm font-medium transition-colors ${
-      isActive(path)
-        ? 'text-brand-600'
-        : 'text-stone-600 hover:text-stone-900'
-    }`;
+  const organizerLinks = [
+    { to: '/dashboard', label: 'Dashboard' },
+    { to: '/events',    label: 'Events' },
+    { to: '/map',       label: 'Map' },
+  ];
+
+  const links = user?.role === 'NGO' ? ngoLinks : organizerLinks;
 
   return (
-    <nav className="bg-white border-b border-stone-100 sticky top-0 z-50">
+    <nav className="bg-white border-b border-stone-100 sticky top-0 z-40 shadow-sm">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-        {/* Logo */}
-        <Link to="/dashboard" className="font-display font-bold text-xl text-stone-900 shrink-0">
-          🍱 FoodBridge
+        <Link to="/dashboard" className="font-display font-bold text-brand-600 text-lg tracking-tight shrink-0">
+          🌉 FoodBridge
         </Link>
 
-        {/* Desktop links */}
-        <div className="hidden sm:flex items-center gap-6">
-          <Link to="/dashboard" className={linkCls('/dashboard')}>Dashboard</Link>
-          <Link to="/events"    className={linkCls('/events')}>Events</Link>
-          <Link to="/map"       className={linkCls('/map')}>Map</Link>
-          {isNGO && (
-            <Link to="/bookings" className={linkCls('/bookings')}>My Bookings</Link>
-          )}
-        </div>
+        {user && (
+          <>
+            {/* Desktop nav */}
+            <div className="hidden sm:flex items-center gap-1">
+              {links.map(({ to, label }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${
+                    isActive(to)
+                      ? 'bg-brand-50 text-brand-700'
+                      : 'text-stone-600 hover:text-stone-900 hover:bg-stone-50'
+                  }`}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
 
-        {/* Right side */}
-        <div className="hidden sm:flex items-center gap-3">
-          <span className="text-xs bg-stone-100 text-stone-600 px-2.5 py-1 rounded-full font-medium">
-            {user?.role}
-          </span>
-          <span className="text-sm text-stone-500 max-w-[120px] truncate">{user?.name}</span>
-          <button
-            onClick={handleLogout}
-            className="btn-secondary text-sm py-1.5 px-3"
-          >
-            Logout
-          </button>
-        </div>
+            <div className="flex items-center gap-3 ml-auto">
+              <span className="hidden sm:inline text-xs text-stone-400 font-medium">
+                {user.name} · <span className={user.role === 'ORGANIZER' ? 'text-brand-600' : 'text-forest-600'}>{user.role}</span>
+              </span>
 
-        {/* Mobile hamburger */}
-        <button
-          className="sm:hidden p-2 rounded-lg text-stone-500 hover:bg-stone-100"
-          onClick={() => setMenuOpen((o) => !o)}
-          aria-label="Toggle menu"
-        >
-          {menuOpen ? '✕' : '☰'}
-        </button>
+              {user.role === 'ORGANIZER' && (
+                <Link to="/events/new" className="hidden sm:inline btn-primary text-xs py-1.5 px-3">
+                  + New Event
+                </Link>
+              )}
+
+              <button
+                onClick={handleLogout}
+                className="text-xs text-stone-500 hover:text-stone-700 font-medium"
+              >
+                Logout
+              </button>
+
+              {/* Mobile hamburger */}
+              <button
+                onClick={() => setMenuOpen((o) => !o)}
+                className="sm:hidden p-1.5 rounded-lg hover:bg-stone-100 text-stone-600"
+              >
+                {menuOpen ? '✕' : '☰'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Mobile menu */}
-      {menuOpen && (
-        <div className="sm:hidden border-t border-stone-100 bg-white px-4 py-3 flex flex-col gap-3">
-          <Link to="/dashboard" className="text-sm font-medium text-stone-700" onClick={() => setMenuOpen(false)}>Dashboard</Link>
-          <Link to="/events"    className="text-sm font-medium text-stone-700" onClick={() => setMenuOpen(false)}>Events</Link>
-          <Link to="/map"       className="text-sm font-medium text-stone-700" onClick={() => setMenuOpen(false)}>Map</Link>
-          {isNGO && (
-            <Link to="/bookings" className="text-sm font-medium text-stone-700" onClick={() => setMenuOpen(false)}>My Bookings</Link>
+      {user && menuOpen && (
+        <div className="sm:hidden border-t border-stone-100 bg-white px-4 py-3 space-y-1">
+          {links.map(({ to, label }) => (
+            <Link
+              key={to}
+              to={to}
+              onClick={() => setMenuOpen(false)}
+              className={`block text-sm font-medium px-3 py-2 rounded-lg ${
+                isActive(to) ? 'bg-brand-50 text-brand-700' : 'text-stone-600 hover:bg-stone-50'
+              }`}
+            >
+              {label}
+            </Link>
+          ))}
+          {user.role === 'ORGANIZER' && (
+            <Link to="/events/new" onClick={() => setMenuOpen(false)} className="block text-sm font-medium px-3 py-2 text-brand-600">
+              + New Event
+            </Link>
           )}
-          <hr className="border-stone-100" />
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-stone-500">{user?.name} · {user?.role}</span>
-            <button onClick={handleLogout} className="btn-secondary text-sm py-1.5 px-3">Logout</button>
-          </div>
         </div>
       )}
     </nav>

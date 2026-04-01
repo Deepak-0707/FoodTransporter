@@ -1,25 +1,23 @@
+// src/pages/EventDetailPage.jsx — Phase 3
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { eventsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import PageLayout from '../components/PageLayout';
-import BookingForm from '../components/BookingForm';
+
+const URGENCY_STYLES = {
+  CRITICAL: { cls: 'bg-red-100 text-red-700 border-red-200',      icon: '🔴', pulse: true  },
+  HIGH:     { cls: 'bg-orange-100 text-orange-700 border-orange-200', icon: '🟠', pulse: false },
+  MEDIUM:   { cls: 'bg-amber-100 text-amber-700 border-amber-200',   icon: '🟡', pulse: false },
+  LOW:      { cls: 'bg-forest-100 text-forest-700 border-forest-100',icon: '🟢', pulse: false },
+  EXPIRED:  { cls: 'bg-stone-100 text-stone-500 border-stone-200',   icon: '⚫', pulse: false },
+};
 
 function formatDateTime(dt) {
   return new Date(dt).toLocaleString(undefined, {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
-}
-
-function ExpiryBadge({ expiryTime }) {
-  const diffMin = (new Date(expiryTime) - new Date()) / 60000;
-  let label, cls;
-  if (diffMin < 0)        { label = 'Expired';          cls = 'bg-stone-100 text-stone-500'; }
-  else if (diffMin < 60)  { label = 'Expiring soon!';   cls = 'bg-red-100 text-red-600 animate-pulse-soft'; }
-  else if (diffMin < 240) { label = 'A few hours left'; cls = 'bg-amber-100 text-amber-700'; }
-  else                    { label = 'Available';         cls = 'bg-forest-100 text-forest-700'; }
-  return <span className={`inline-flex items-center gap-1 text-sm font-semibold px-3 py-1.5 rounded-full ${cls}`}>⏰ {label}</span>;
 }
 
 export default function EventDetailPage() {
@@ -38,112 +36,130 @@ export default function EventDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  const handleDelete = async () => {
-    if (!window.confirm('Delete this event permanently?')) return;
-    try { await eventsAPI.remove(id); navigate('/events'); }
-    catch { alert('Failed to delete event'); }
-  };
-
-  const handleBookingSuccess = (booking) => {
-    setEvent((prev) => ({
-      ...prev,
-      remaining_quantity: prev.remaining_quantity - booking.quantity_requested,
-    }));
-  };
+  if (loading) return <PageLayout><div className="text-center py-16 text-stone-400 animate-pulse-soft">Loading…</div></PageLayout>;
+  if (error)   return (
+    <PageLayout>
+      <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3">{error}</div>
+      <Link to="/events" className="text-sm text-stone-500 hover:underline mt-4 inline-block">← Back to Events</Link>
+    </PageLayout>
+  );
 
   const isOwner   = user?.id === event?.organizer_id;
   const isNGO     = user?.role === 'NGO';
-  const isExpired = event ? new Date(event.expiry_time) < new Date() : false;
+  const isExpired = event.label === 'EXPIRED' || new Date(event.expiry_time) < new Date();
+  const urg       = URGENCY_STYLES[event.label] || URGENCY_STYLES.LOW;
+  const pct       = Math.max(0, Math.min(100, Math.round((event.remaining_quantity / event.quantity) * 100)));
 
-  if (loading) return <PageLayout><div className="text-stone-400 animate-pulse-soft py-16 text-center">Loading…</div></PageLayout>;
-  if (error)   return <PageLayout><div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3">{error}</div></PageLayout>;
-
-  const filledPct = Math.round(((event.quantity - event.remaining_quantity) / event.quantity) * 100);
+  const handleDelete = async () => {
+    if (!window.confirm('Delete this event?')) return;
+    try {
+      await eventsAPI.remove(id);
+      navigate('/dashboard');
+    } catch {
+      alert('Failed to delete event');
+    }
+  };
 
   return (
-    <PageLayout>
+    <PageLayout title={event.title} subtitle={`By ${event.organizer_name}`}>
       <div className="max-w-2xl mx-auto">
-        <Link to="/events" className="text-sm text-stone-500 hover:text-stone-700 flex items-center gap-1 mb-6">← Back to Events</Link>
+        <Link to="/events" className="text-sm text-stone-500 hover:text-stone-700 flex items-center gap-1 mb-6">
+          ← Back to Events
+        </Link>
 
-        <div className="card p-8 flex flex-col gap-6">
-          {/* Title */}
-          <div className="flex flex-col gap-3">
-            <ExpiryBadge expiryTime={event.expiry_time} />
-            <h1 className="font-display font-bold text-2xl text-stone-900">{event.title}</h1>
-            {event.description && <p className="text-stone-600 leading-relaxed">{event.description}</p>}
+        {/* Urgency banner */}
+        {event.label === 'CRITICAL' && (
+          <div className="mb-5 flex items-center gap-3 bg-red-600 text-white rounded-2xl px-5 py-3 shadow-md animate-pulse">
+            <span className="text-2xl">🚨</span>
+            <div>
+              <p className="font-bold text-sm">URGENT — Expires in under 1 hour!</p>
+              <p className="text-red-100 text-xs">Immediate action needed to avoid food waste.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Main event card */}
+        <div className="card p-6 mb-6">
+          <div className="flex items-start justify-between gap-3 mb-5">
+            <h2 className="font-display font-bold text-2xl text-stone-900">{event.title}</h2>
+            <span className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${urg.cls} ${urg.pulse ? 'animate-pulse' : ''}`}>
+              {urg.icon} {event.label}
+            </span>
           </div>
 
-          {/* Quantity section */}
-          <div className="bg-stone-50 rounded-xl p-4">
-            <div className="flex justify-between items-center mb-3">
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Food Availability</p>
-              <span className="text-sm font-semibold text-stone-700">
-                {event.remaining_quantity} / {event.quantity} {event.quantity_unit} remaining
-              </span>
+          {event.description && (
+            <p className="text-stone-600 mb-5 leading-relaxed">{event.description}</p>
+          )}
+
+          {/* Quantity cards */}
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className="bg-brand-50 border border-brand-100 rounded-xl p-4">
+              <p className="text-xs text-brand-600 font-semibold uppercase tracking-wide mb-1">Total Quantity</p>
+              <p className="text-stone-900 font-bold text-xl">{event.quantity} <span className="text-sm font-normal text-stone-500">{event.quantity_unit}</span></p>
             </div>
-            <div className="w-full bg-white rounded-full h-3 border border-stone-200">
+            <div className={`border rounded-xl p-4 ${event.remaining_quantity > 0 ? 'bg-forest-50 border-forest-100' : 'bg-stone-50 border-stone-200'}`}>
+              <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${event.remaining_quantity > 0 ? 'text-forest-600' : 'text-stone-400'}`}>Remaining</p>
+              <p className="text-stone-900 font-bold text-xl">{event.remaining_quantity} <span className="text-sm font-normal text-stone-500">{event.quantity_unit}</span></p>
+            </div>
+          </div>
+
+          {/* Availability bar */}
+          <div className="mb-5">
+            <div className="flex justify-between text-xs text-stone-500 mb-1.5">
+              <span>Availability</span>
+              <span>{pct}% remaining</span>
+            </div>
+            <div className="w-full bg-stone-100 rounded-full h-2.5">
               <div
-                className="bg-forest-500 h-3 rounded-full transition-all duration-700"
-                style={{ width: `${Math.max(0, 100 - filledPct)}%` }}
+                className={`h-2.5 rounded-full transition-all duration-500 ${
+                  event.label === 'CRITICAL' ? 'bg-red-500' : 'bg-forest-500'
+                }`}
+                style={{ width: `${pct}%` }}
               />
             </div>
-            <div className="flex justify-between text-xs text-stone-400 mt-1.5">
-              <span>{filledPct}% claimed</span>
-              <span>{event.booking_count} booking{event.booking_count !== 1 ? 's' : ''}</span>
-            </div>
           </div>
 
-          {/* Details grid */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-stone-50 rounded-xl p-4">
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-1">Expires At</p>
-              <p className="text-stone-800 font-medium text-sm">{formatDateTime(event.expiry_time)}</p>
-            </div>
-            <div className="bg-stone-50 rounded-xl p-4">
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-1">Posted By</p>
-              <p className="text-stone-800 font-medium">{event.organizer_name}</p>
-              {event.organizer_email && <p className="text-xs text-stone-500">{event.organizer_email}</p>}
-            </div>
-            <div className="bg-stone-50 rounded-xl p-4 col-span-2">
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-1">Location</p>
-              <p className="text-stone-800 font-medium text-sm">
-                📍 {parseFloat(event.latitude).toFixed(5)}, {parseFloat(event.longitude).toFixed(5)}
-              </p>
-              <a
-                href={`https://www.openstreetmap.org/?mlat=${event.latitude}&mlon=${event.longitude}&zoom=16`}
-                target="_blank" rel="noopener noreferrer"
-                className="text-xs text-brand-600 hover:underline mt-1 inline-block"
-              >
-                View on OpenStreetMap ↗
-              </a>
-            </div>
+          {/* Meta details */}
+          <div className="space-y-2 text-sm text-stone-600 border-t border-stone-100 pt-4">
+            <p>⏰ <strong>Expires:</strong> {formatDateTime(event.expiry_time)}</p>
+            <p>📍 <strong>Location:</strong> {parseFloat(event.latitude).toFixed(4)}, {parseFloat(event.longitude).toFixed(4)}</p>
+            <p>👤 <strong>Organizer:</strong> {event.organizer_name} ({event.organizer_email})</p>
+            {event.request_count != null && (
+              <p>📋 <strong>Requests:</strong> {event.request_count}</p>
+            )}
           </div>
+        </div>
 
-          <p className="text-xs text-stone-400">
-            Posted on {new Date(event.created_at).toLocaleDateString(undefined, { dateStyle: 'long' })}
-          </p>
-
-          {/* NGO booking form */}
-          {isNGO && !isExpired && (
-            <BookingForm
-              eventId={event.id}
-              remainingQty={event.remaining_quantity}
-              unit={event.quantity_unit}
-              onSuccess={handleBookingSuccess}
-            />
-          )}
-          {isNGO && !isExpired && (
-            <Link to={`/events/${event.id}/book`} className="text-xs text-center text-brand-600 hover:underline">
-              Open full booking page →
+        {/* Actions */}
+        <div className="flex flex-wrap gap-3">
+          {isNGO && !isExpired && event.remaining_quantity > 0 && (
+            <Link
+              to={`/events/${event.id}/request`}
+              className={`font-semibold py-2.5 px-5 rounded-xl transition-all text-sm ${
+                event.label === 'CRITICAL' ? 'bg-red-600 hover:bg-red-700 text-white' : 'btn-primary'
+              }`}
+            >
+              {event.label === 'CRITICAL' ? '🚨 Request Urgently' : '📋 Request Food'}
             </Link>
           )}
 
-          {/* Organizer actions */}
           {isOwner && (
-            <div className="flex flex-wrap gap-3 pt-2 border-t border-stone-100">
-              <Link to={`/events/${event.id}/edit`} className="btn-primary text-sm">Edit Event</Link>
-              <Link to={`/events/${event.id}/bookings`} className="btn-secondary text-sm">View Bookings</Link>
-              <button onClick={handleDelete} className="btn-danger text-sm">Delete Event</button>
+            <>
+              <Link to={`/events/${event.id}/requests`} className="btn-primary text-sm py-2.5 px-5">
+                ⚡ Allocation Dashboard
+              </Link>
+              <Link to={`/events/${event.id}/edit`} className="btn-secondary text-sm py-2.5 px-5">
+                Edit Event
+              </Link>
+              <button onClick={handleDelete} className="btn-danger text-sm py-2.5 px-5">
+                Delete
+              </button>
+            </>
+          )}
+
+          {isNGO && isExpired && (
+            <div className="text-sm text-stone-500 bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5">
+              This event has expired and is no longer accepting requests.
             </div>
           )}
         </div>

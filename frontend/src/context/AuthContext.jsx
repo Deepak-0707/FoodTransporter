@@ -1,3 +1,5 @@
+// src/context/AuthContext.jsx
+// Global authentication state — provides user info and token to all components
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext(null);

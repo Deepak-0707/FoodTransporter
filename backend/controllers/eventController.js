@@ -1,10 +1,12 @@
+// controllers/eventController.js
+// CRUD operations for food events — Phase 3: priority engine + urgency scoring
 const pool = require('../config/db');
 const { haversineDistance } = require('../services/distanceService');
+const { sortByUrgency, computeUrgency } = require('../services/priorityService');
 
 /**
  * POST /events
  * Creates a new food event. Only ORGANIZER role.
- * Body: { title, description, latitude, longitude, quantity, quantity_unit, expiry_time }
  */
 const createEvent = async (req, res) => {
   const { title, description, latitude, longitude, quantity, quantity_unit, expiry_time } = req.body;
@@ -33,12 +35,13 @@ const createEvent = async (req, res) => {
         parseFloat(longitude),
         qty,
         quantity_unit || 'kg',
-        qty,           // remaining_quantity starts equal to total quantity
+        qty,
         expiry_time,
       ]
     );
 
-    res.status(201).json({ message: 'Event created', event: result.rows[0] });
+    const event = result.rows[0];
+    res.status(201).json({ message: 'Event created', event: { ...event, ...computeUrgency(event.expiry_time) } });
   } catch (err) {
     console.error('Create event error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
@@ -47,8 +50,8 @@ const createEvent = async (req, res) => {
 
 /**
  * GET /events
- * Returns all events (or organizer's own if ?mine=true).
- * Includes remaining_quantity and booking count.
+ * Returns all events sorted by urgency (Phase 3 priority engine).
+ * Includes request counts instead of booking counts.
  */
 const getEvents = async (req, res) => {
   const { mine } = req.query;
@@ -59,29 +62,33 @@ const getEvents = async (req, res) => {
     if (mine === 'true' && req.user.role === 'ORGANIZER') {
       query = `
         SELECT e.*, u.name AS organizer_name,
-               COUNT(b.id) AS booking_count
+               COUNT(DISTINCT r.id) AS request_count,
+               COUNT(DISTINCT r.id) FILTER (WHERE r.status = 'PENDING')  AS pending_requests,
+               COUNT(DISTINCT r.id) FILTER (WHERE r.status = 'APPROVED') AS approved_requests
         FROM events e
         JOIN users u ON e.organizer_id = u.id
-        LEFT JOIN bookings b ON b.event_id = e.id
+        LEFT JOIN requests r ON r.event_id = e.id
         WHERE e.organizer_id = $1
         GROUP BY e.id, u.name
-        ORDER BY e.created_at DESC
       `;
       params = [req.user.id];
     } else {
       query = `
         SELECT e.*, u.name AS organizer_name,
-               COUNT(b.id) AS booking_count
+               COUNT(DISTINCT r.id) AS request_count,
+               COUNT(DISTINCT r.id) FILTER (WHERE r.status = 'PENDING')  AS pending_requests,
+               COUNT(DISTINCT r.id) FILTER (WHERE r.status = 'APPROVED') AS approved_requests
         FROM events e
         JOIN users u ON e.organizer_id = u.id
-        LEFT JOIN bookings b ON b.event_id = e.id
+        LEFT JOIN requests r ON r.event_id = e.id
         GROUP BY e.id, u.name
-        ORDER BY e.expiry_time ASC
       `;
     }
 
     const result = await pool.query(query, params);
-    res.json({ events: result.rows });
+    // Apply priority engine: sort by urgency score (most urgent first)
+    const sorted = sortByUrgency(result.rows);
+    res.json({ events: sorted });
   } catch (err) {
     console.error('Get events error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
@@ -89,9 +96,8 @@ const getEvents = async (req, res) => {
 };
 
 /**
- * GET /events/nearby?lat=...&lng=...&radius=...
- * Returns events within radius km of the given coordinates.
- * Uses Haversine calculation in JS after fetching all active events.
+ * GET /events/nearby
+ * Returns events within radius km, sorted by urgency then distance.
  */
 const getNearbyEvents = async (req, res) => {
   const { lat, lng, radius } = req.query;
@@ -100,43 +106,38 @@ const getNearbyEvents = async (req, res) => {
     return res.status(400).json({ error: 'lat and lng query parameters are required' });
   }
 
-  const userLat    = parseFloat(lat);
-  const userLng    = parseFloat(lng);
-  const radiusKm   = parseFloat(radius) || 10; // default 10 km
+  const userLat  = parseFloat(lat);
+  const userLng  = parseFloat(lng);
+  const radiusKm = parseFloat(radius) || 10;
 
   if (isNaN(userLat) || isNaN(userLng)) {
     return res.status(400).json({ error: 'lat and lng must be valid numbers' });
   }
 
   try {
-    // Fetch all non-expired, non-empty events
     const result = await pool.query(
       `SELECT e.*, u.name AS organizer_name,
-              COUNT(b.id) AS booking_count
+              COUNT(DISTINCT r.id) AS request_count
        FROM events e
        JOIN users u ON e.organizer_id = u.id
-       LEFT JOIN bookings b ON b.event_id = e.id
+       LEFT JOIN requests r ON r.event_id = e.id
        WHERE e.expiry_time > NOW()
          AND e.remaining_quantity > 0
-       GROUP BY e.id, u.name
-       ORDER BY e.expiry_time ASC`
+       GROUP BY e.id, u.name`
     );
 
-    // Apply Haversine filter in JS
+    // Filter by radius and attach distance
     const nearby = result.rows
       .map((event) => {
-        const dist = haversineDistance(
-          userLat,
-          userLng,
-          parseFloat(event.latitude),
-          parseFloat(event.longitude)
-        );
+        const dist = haversineDistance(userLat, userLng, parseFloat(event.latitude), parseFloat(event.longitude));
         return { ...event, distance_km: parseFloat(dist.toFixed(2)) };
       })
-      .filter((event) => event.distance_km <= radiusKm)
-      .sort((a, b) => a.distance_km - b.distance_km);
+      .filter((event) => event.distance_km <= radiusKm);
 
-    res.json({ events: nearby, count: nearby.length, radius_km: radiusKm });
+    // Sort by urgency first, then distance
+    const sorted = sortByUrgency(nearby);
+
+    res.json({ events: sorted, count: sorted.length, radius_km: radiusKm });
   } catch (err) {
     console.error('Get nearby events error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
@@ -145,7 +146,7 @@ const getNearbyEvents = async (req, res) => {
 
 /**
  * GET /events/:id
- * Returns details of a single event including booking info.
+ * Returns details of a single event including request info.
  */
 const getEventById = async (req, res) => {
   const { id } = req.params;
@@ -153,21 +154,22 @@ const getEventById = async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT e.*, u.name AS organizer_name, u.email AS organizer_email,
-              COUNT(b.id) AS booking_count,
-              COALESCE(SUM(b.quantity_requested), 0) AS total_booked
+              COUNT(DISTINCT r.id) AS request_count,
+              COALESCE(SUM(r.allocated_quantity) FILTER (WHERE r.status = 'APPROVED'), 0) AS total_allocated
        FROM events e
        JOIN users u ON e.organizer_id = u.id
-       LEFT JOIN bookings b ON b.event_id = e.id AND b.status = 'confirmed'
+       LEFT JOIN requests r ON r.event_id = e.id
        WHERE e.id = $1
        GROUP BY e.id, u.name, u.email`,
       [id]
     );
 
-    if (result.rows.length === 0) {
+    if (!result.rows.length) {
       return res.status(404).json({ error: 'Event not found' });
     }
 
-    res.json({ event: result.rows[0] });
+    const event = result.rows[0];
+    res.json({ event: { ...event, ...computeUrgency(event.expiry_time) } });
   } catch (err) {
     console.error('Get event error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
@@ -185,23 +187,21 @@ const updateEvent = async (req, res) => {
 
   try {
     const existing = await pool.query('SELECT * FROM events WHERE id = $1', [id]);
-    if (existing.rows.length === 0) return res.status(404).json({ error: 'Event not found' });
+    if (!existing.rows.length) return res.status(404).json({ error: 'Event not found' });
     if (existing.rows[0].organizer_id !== organizer_id) {
       return res.status(403).json({ error: 'You can only edit your own events' });
     }
 
     const event = existing.rows[0];
 
-    // If quantity is updated, adjust remaining_quantity proportionally
-    let newQty = quantity ? parseInt(quantity, 10) : null;
+    let newQty       = quantity ? parseInt(quantity, 10) : null;
     let newRemaining = event.remaining_quantity;
 
     if (newQty !== null) {
       if (isNaN(newQty) || newQty <= 0) {
         return res.status(400).json({ error: 'quantity must be a positive integer' });
       }
-      // Difference in total quantity; cap remaining at new total
-      const delta = newQty - event.quantity;
+      const delta  = newQty - event.quantity;
       newRemaining = Math.max(0, Math.min(event.remaining_quantity + delta, newQty));
     }
 
@@ -247,7 +247,7 @@ const deleteEvent = async (req, res) => {
 
   try {
     const existing = await pool.query('SELECT * FROM events WHERE id = $1', [id]);
-    if (existing.rows.length === 0) return res.status(404).json({ error: 'Event not found' });
+    if (!existing.rows.length) return res.status(404).json({ error: 'Event not found' });
     if (existing.rows[0].organizer_id !== organizer_id) {
       return res.status(403).json({ error: 'You can only delete your own events' });
     }
