@@ -6,6 +6,7 @@ const authRoutes    = require('./routes/auth');
 const eventRoutes   = require('./routes/events');
 const bookingRoutes = require('./routes/bookings');
 const requestRoutes = require('./routes/requests');
+const { runAllocationForAllEvents } = require('./services/allocationService');
 
 const app  = express();
 const PORT = process.env.PORT || 5001;
