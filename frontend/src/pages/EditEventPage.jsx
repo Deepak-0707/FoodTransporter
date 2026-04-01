@@ -1,3 +1,4 @@
+// src/pages/EditEventPage.jsx — Phase 2: numeric quantity + unit
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { eventsAPI } from '../services/api';

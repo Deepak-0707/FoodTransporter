@@ -1,3 +1,5 @@
+// src/components/PageLayout.jsx
+// Wraps all authenticated pages with Navbar + consistent padding
 import React from 'react';
 import Navbar from './Navbar';
 

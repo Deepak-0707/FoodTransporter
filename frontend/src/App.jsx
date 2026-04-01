@@ -1,18 +1,19 @@
+// src/App.jsx — Phase 3: requests + allocation routes
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
-import LoginPage          from './pages/LoginPage';
-import RegisterPage       from './pages/RegisterPage';
-import DashboardPage      from './pages/DashboardPage';
-import CreateEventPage    from './pages/CreateEventPage';
-import EditEventPage      from './pages/EditEventPage';
-import EventListPage      from './pages/EventListPage';
-import EventDetailPage    from './pages/EventDetailPage';
-import MapViewPage        from './pages/MapViewPage';
-import BookEventPage      from './pages/BookEventPage';
-import MyBookingsPage     from './pages/MyBookingsPage';
-import EventBookingsPage  from './pages/EventBookingsPage';
+import LoginPage           from './pages/LoginPage';
+import RegisterPage        from './pages/RegisterPage';
+import DashboardPage       from './pages/DashboardPage';
+import CreateEventPage     from './pages/CreateEventPage';
+import EditEventPage       from './pages/EditEventPage';
+import EventListPage       from './pages/EventListPage';
+import EventDetailPage     from './pages/EventDetailPage';
+import MapViewPage         from './pages/MapViewPage';
+import RequestFoodPage     from './pages/RequestFoodPage';
+import MyRequestsPage      from './pages/MyRequestsPage';
+import EventRequestsPage   from './pages/EventRequestsPage';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -46,17 +47,17 @@ export default function App() {
           <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
 
           {/* Any authenticated user */}
-          <Route path="/dashboard"    element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-          <Route path="/events"       element={<ProtectedRoute><EventListPage /></ProtectedRoute>} />
-          <Route path="/events/:id"   element={<ProtectedRoute><EventDetailPage /></ProtectedRoute>} />
-          <Route path="/map"          element={<ProtectedRoute><MapViewPage /></ProtectedRoute>} />
+          <Route path="/dashboard"  element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+          <Route path="/events"     element={<ProtectedRoute><EventListPage /></ProtectedRoute>} />
+          <Route path="/events/:id" element={<ProtectedRoute><EventDetailPage /></ProtectedRoute>} />
+          <Route path="/map"        element={<ProtectedRoute><MapViewPage /></ProtectedRoute>} />
 
           {/* NGO-only */}
-          <Route path="/events/:id/book" element={
-            <ProtectedRoute><RoleRoute role="NGO"><BookEventPage /></RoleRoute></ProtectedRoute>
+          <Route path="/events/:id/request" element={
+            <ProtectedRoute><RoleRoute role="NGO"><RequestFoodPage /></RoleRoute></ProtectedRoute>
           } />
-          <Route path="/bookings" element={
-            <ProtectedRoute><RoleRoute role="NGO"><MyBookingsPage /></RoleRoute></ProtectedRoute>
+          <Route path="/requests" element={
+            <ProtectedRoute><RoleRoute role="NGO"><MyRequestsPage /></RoleRoute></ProtectedRoute>
           } />
 
           {/* Organizer-only */}
@@ -66,8 +67,8 @@ export default function App() {
           <Route path="/events/:id/edit" element={
             <ProtectedRoute><RoleRoute role="ORGANIZER"><EditEventPage /></RoleRoute></ProtectedRoute>
           } />
-          <Route path="/events/:id/bookings" element={
-            <ProtectedRoute><RoleRoute role="ORGANIZER"><EventBookingsPage /></RoleRoute></ProtectedRoute>
+          <Route path="/events/:id/requests" element={
+            <ProtectedRoute><RoleRoute role="ORGANIZER"><EventRequestsPage /></RoleRoute></ProtectedRoute>
           } />
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

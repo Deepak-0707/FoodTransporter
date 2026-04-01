@@ -1,3 +1,4 @@
+// src/pages/CreateEventPage.jsx — Phase 2: numeric quantity + unit field
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { eventsAPI } from '../services/api';

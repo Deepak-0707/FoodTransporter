@@ -1,3 +1,4 @@
+// routes/events.js — Phase 3
 const express = require('express');
 const router  = express.Router();
 const { authenticate, requireRole } = require('../middleware/auth');
@@ -9,7 +10,7 @@ const {
   updateEvent,
   deleteEvent,
 } = require('../controllers/eventController');
-const { getEventBookings } = require('../controllers/bookingController');
+const { getEventRequests, allocateEvent } = require('../controllers/requestController');
 
 // All event routes require authentication
 router.use(authenticate);
@@ -23,8 +24,11 @@ router.get('/', getEvents);
 // GET /events/:id — single event
 router.get('/:id', getEventById);
 
-// GET /events/:id/bookings — organizer views bookings for their event
-router.get('/:id/bookings', requireRole('ORGANIZER'), getEventBookings);
+// GET /events/:id/requests — organizer views requests for their event
+router.get('/:id/requests', requireRole('ORGANIZER'), getEventRequests);
+
+// POST /events/:id/allocate — organizer manually triggers allocation
+router.post('/:id/allocate', requireRole('ORGANIZER'), allocateEvent);
 
 // POST /events — organizer only
 router.post('/', requireRole('ORGANIZER'), createEvent);

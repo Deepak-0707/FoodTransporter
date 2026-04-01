@@ -1,3 +1,5 @@
+// src/pages/MapViewPage.jsx — Phase 2
+// Enhanced map: user location, nearby highlighting, booking from popup
 import React, { useEffect, useState, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import { Link } from 'react-router-dom';
@@ -345,7 +347,7 @@ export default function MapViewPage() {
                         </Link>
                         {isNGO && (
                           <Link
-                            to={`/events/${event.id}/book`}
+                            to={`/events/${event.id}/request`}
                             className="text-xs font-semibold text-forest-600 hover:underline"
                           >
                             Book Page →

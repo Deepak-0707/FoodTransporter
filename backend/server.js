@@ -5,9 +5,10 @@ const cors    = require('cors');
 const authRoutes    = require('./routes/auth');
 const eventRoutes   = require('./routes/events');
 const bookingRoutes = require('./routes/bookings');
+const requestRoutes = require('./routes/requests');
 
 const app  = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // ─── Middleware ──────────────────────────────────────────────
 app.use(cors({
@@ -28,6 +29,7 @@ app.use((req, _res, next) => {
 app.use('/auth',     authRoutes);
 app.use('/events',   eventRoutes);
 app.use('/bookings', bookingRoutes);
+app.use('/requests', requestRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), phase: 2 });
@@ -44,9 +46,24 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// ─── Background Allocation Job (cron simulation) ────────────
+// Runs every 5 minutes to catch any missed allocations.
+// In production, replace with a proper cron service or pg_cron.
+const ALLOCATION_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+setInterval(async () => {
+  console.log('[CronJob] Running scheduled allocation sweep...');
+  try {
+    await runAllocationForAllEvents();
+  } catch (err) {
+    console.error('[CronJob] Scheduled allocation failed:', err.message);
+  }
+}, ALLOCATION_INTERVAL_MS);
+
 app.listen(PORT, () => {
-  console.log(`🚀 FoodBridge API (Phase 2) running on port ${PORT}`);
+  console.log(`🚀 FoodBridge API (Phase 3) running on port ${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`   Allocation cron: every ${ALLOCATION_INTERVAL_MS / 60000} minutes`);
 });
 
 module.exports = app;
