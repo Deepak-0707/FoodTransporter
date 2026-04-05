@@ -1,8 +1,8 @@
-// src/pages/RequestFoodPage.jsx — Phase 3
+// src/pages/RequestFoodPage.jsx — Phase 3 + Menu Item Selection
 // Replaces BookEventPage. NGO submits a request; system allocates intelligently.
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { eventsAPI, requestsAPI } from '../services/api';
+import { eventsAPI, requestsAPI, menuAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import PageLayout from '../components/PageLayout';
 
@@ -27,20 +27,44 @@ export default function RequestFoodPage() {
   const navigate = useNavigate();
 
   const [event, setEvent]       = useState(null);
+  const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
   const [qty, setQty]           = useState('');
+  // itemQtys: { [menuItemId]: number }
+  const [itemQtys, setItemQtys] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitted, setSubmitted]     = useState(false);
   const [allocation, setAllocation]   = useState(null);
 
   useEffect(() => {
-    eventsAPI.getById(id)
-      .then((res) => setEvent(res.data.event))
+    Promise.all([
+      eventsAPI.getById(id),
+      menuAPI.getByEvent(id).catch(() => ({ data: { menuItems: [] } })),
+    ])
+      .then(([eventRes, menuRes]) => {
+        setEvent(eventRes.data.event);
+        const items = menuRes.data.menuItems || [];
+        setMenuItems(items);
+        // Pre-fill itemQtys with 0
+        const init = {};
+        items.forEach(item => { init[item.id] = 0; });
+        setItemQtys(init);
+      })
       .catch(() => setError('Event not found'))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // When any menu item qty changes, auto-update the total qty
+  const handleItemQtyChange = (itemId, value) => {
+    const newVal = Math.max(0, parseInt(value, 10) || 0);
+    const newItemQtys = { ...itemQtys, [itemId]: newVal };
+    setItemQtys(newItemQtys);
+    // Auto-sum total
+    const total = Object.values(newItemQtys).reduce((a, b) => a + b, 0);
+    if (total > 0) setQty(String(total));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -51,9 +75,23 @@ export default function RequestFoodPage() {
       return;
     }
 
+    // Build selected_items array (only items with qty > 0)
+    const selected_items = menuItems
+      .filter(item => (itemQtys[item.id] || 0) > 0)
+      .map(item => ({
+        menu_item_id: item.id,
+        name: item.name,
+        quantity: itemQtys[item.id],
+        quantity_unit: item.quantity_unit,
+      }));
+
     setSubmitting(true);
     try {
-      const res = await requestsAPI.create({ event_id: id, quantity_requested: quantity });
+      const res = await requestsAPI.create({
+        event_id: id,
+        quantity_requested: quantity,
+        selected_items: selected_items.length > 0 ? selected_items : undefined,
+      });
       setSubmitted(true);
       setAllocation(res.data.allocation);
     } catch (err) {
@@ -74,6 +112,7 @@ export default function RequestFoodPage() {
   const isExpired = event.label === 'EXPIRED' || new Date(event.expiry_time) < new Date();
   const isNGO     = user?.role === 'NGO';
   const urgencyColor = URGENCY_COLORS[event.label] || URGENCY_COLORS.LOW;
+  const hasMenuItems = menuItems.length > 0;
 
   return (
     <PageLayout title="Request Food" subtitle="Submit your food request — the system will allocate fairly.">
@@ -167,12 +206,56 @@ export default function RequestFoodPage() {
         )}
 
         {isNGO && !isExpired && !submitted && (
-          <form onSubmit={handleSubmit} className="card p-6 space-y-4">
+          <form onSubmit={handleSubmit} className="card p-6 space-y-5">
             <h3 className="font-display font-semibold text-stone-900">Submit Your Request</h3>
 
+            {/* Per-menu-item quantities (if menu exists) */}
+            {hasMenuItems && (
+              <div>
+                <label className="block text-sm font-semibold text-stone-700 mb-2">
+                  🍽️ Select quantities by menu item
+                </label>
+                <div className="space-y-2 bg-stone-50 rounded-xl p-3 border border-stone-100">
+                  {menuItems.map(item => (
+                    <div key={item.id} className="flex items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-stone-800 truncate">{item.name}</p>
+                        <p className="text-xs text-stone-400">Available: {item.quantity} {item.quantity_unit}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleItemQtyChange(item.id, (itemQtys[item.id] || 0) - 1)}
+                          className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-700 font-bold text-sm flex items-center justify-center transition-colors"
+                        >−</button>
+                        <input
+                          type="number"
+                          min="0"
+                          max={item.quantity}
+                          value={itemQtys[item.id] || 0}
+                          onChange={(e) => handleItemQtyChange(item.id, e.target.value)}
+                          className="w-16 text-center border border-stone-200 rounded-lg py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleItemQtyChange(item.id, (itemQtys[item.id] || 0) + 1)}
+                          className="w-7 h-7 rounded-lg bg-brand-100 hover:bg-brand-200 text-brand-700 font-bold text-sm flex items-center justify-center transition-colors"
+                        >+</button>
+                        <span className="text-xs text-stone-400 w-8">{item.quantity_unit}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-stone-400 mt-1.5">
+                  Select items above to auto-fill total, or enter total manually below.
+                </p>
+              </div>
+            )}
+
+            {/* Total quantity (always visible) */}
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-1.5">
-                Quantity requested ({event.quantity_unit})
+                {hasMenuItems ? 'Total quantity requested' : `Quantity requested`} ({event.quantity_unit})
               </label>
               <input
                 type="number"

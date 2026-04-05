@@ -24,7 +24,11 @@ export default function EditEventPage() {
         longitude:     e.longitude,
         quantity:      e.quantity,
         quantity_unit: e.quantity_unit || 'kg',
-        expiry_time:   new Date(e.expiry_time).toISOString().slice(0, 16),
+        expiry_time:   (() => {
+          const d = new Date(e.expiry_time);
+          const offset = d.getTimezoneOffset() * 60000;
+          return new Date(d - offset).toISOString().slice(0, 16);
+        })(),
       });
     }).catch(() => setError('Event not found')).finally(() => setLoading(false));
   }, [id]);
@@ -34,12 +38,12 @@ export default function EditEventPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (isNaN(parseInt(form.quantity)) || parseInt(form.quantity) <= 0) {
-      return setError('Quantity must be a positive whole number.');
+    if (!form.quantity || !String(form.quantity).trim()) {
+      return setError('Quantity is required.');
     }
     setSaving(true);
     try {
-      await eventsAPI.update(id, form);
+      await eventsAPI.update(id, { ...form, expiry_time: new Date(form.expiry_time).toISOString() });
       navigate(`/events/${id}`);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to update event');
@@ -69,7 +73,7 @@ export default function EditEventPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-1.5">Quantity *</label>
-              <input type="number" min="1" value={form.quantity} onChange={set('quantity')} className="input-field" required />
+              <input type="text" value={form.quantity} onChange={set('quantity')} className="input-field" placeholder="e.g. 50" required />
             </div>
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-1.5">Unit *</label>

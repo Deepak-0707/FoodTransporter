@@ -1,11 +1,12 @@
+// routes/auth.js — Phase 4
 const express = require('express');
-const router = express.Router();
-const { register, login } = require('../controllers/authController');
+const router  = express.Router();
+const { authenticate } = require('../middleware/auth');
+const { register, login, updateLocation, getMe } = require('../controllers/authController');
 
-// POST /register — create a new user account
 router.post('/register', register);
-
-// POST /login — authenticate and receive JWT
-router.post('/login', login);
+router.post('/login',    login);
+router.get('/me',        authenticate, getMe);
+router.put('/location',  authenticate, updateLocation);
 
 module.exports = router;

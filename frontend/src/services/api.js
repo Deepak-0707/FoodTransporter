@@ -1,4 +1,4 @@
-// src/services/api.js — Phase 3: requests + allocation APIs
+// src/services/api.js — Phase 4: menu items + notifications
 import axios from 'axios';
 
 const api = axios.create({
@@ -27,13 +27,13 @@ api.interceptors.response.use(
   }
 );
 
-// ─── Auth ────────────────────────────────────────────────────
+// Auth
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login:    (data) => api.post('/auth/login',    data),
 };
 
-// ─── Events ──────────────────────────────────────────────────
+// Events
 export const eventsAPI = {
   getAll:    (mine = false) => api.get(`/events${mine ? '?mine=true' : ''}`),
   getById:   (id)           => api.get(`/events/${id}`),
@@ -44,12 +44,29 @@ export const eventsAPI = {
   remove:    (id)           => api.delete(`/events/${id}`),
   getRequests: (id)         => api.get(`/events/${id}/requests`),
   allocate:    (id)         => api.post(`/events/${id}/allocate`),
+  updateRequestAllocation: (eventId, requestId, data) =>
+    api.put(`/events/${eventId}/requests/${requestId}`, data),
 };
 
-// ─── Requests (Phase 3: replaces bookings) ───────────────────
+// Menu Items (Phase 4)
+export const menuAPI = {
+  getByEvent:  (eventId)               => api.get(`/events/${eventId}/menu`),
+  addItem:     (eventId, data)         => api.post(`/events/${eventId}/menu`, data),
+  updateItem:  (eventId, itemId, data) => api.put(`/events/${eventId}/menu/${itemId}`, data),
+  removeItem:  (eventId, itemId)       => api.delete(`/events/${eventId}/menu/${itemId}`),
+};
+
+// Requests
 export const requestsAPI = {
   create:  (data) => api.post('/requests', data),
   getMine: ()     => api.get('/requests/my'),
+};
+
+// Notifications (Phase 4)
+export const notificationsAPI = {
+  getAll:      ()   => api.get('/notifications'),
+  markRead:    (id) => api.put(`/notifications/${id}/read`),
+  markAllRead: ()   => api.put('/notifications/read-all'),
 };
 
 export default api;

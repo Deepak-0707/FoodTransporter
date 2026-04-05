@@ -1,64 +1,166 @@
-// src/pages/EventDetailPage.jsx — Phase 3
-import React, { useEffect, useState } from 'react';
+// src/pages/EventDetails.jsx — Phase 4: full detail with menu + request inline
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { eventsAPI } from '../services/api';
+import { eventsAPI, menuAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
+import { SOCKET_EVENTS } from '../services/socket';
 import PageLayout from '../components/PageLayout';
+import MenuList from '../components/MenuList';
+import MenuForm from '../components/MenuForm';
+import RequestForm from '../components/RequestForm';
 
 const URGENCY_STYLES = {
-  CRITICAL: { cls: 'bg-red-100 text-red-700 border-red-200',      icon: '🔴', pulse: true  },
-  HIGH:     { cls: 'bg-orange-100 text-orange-700 border-orange-200', icon: '🟠', pulse: false },
-  MEDIUM:   { cls: 'bg-amber-100 text-amber-700 border-amber-200',   icon: '🟡', pulse: false },
-  LOW:      { cls: 'bg-forest-100 text-forest-700 border-forest-100',icon: '🟢', pulse: false },
-  EXPIRED:  { cls: 'bg-stone-100 text-stone-500 border-stone-200',   icon: '⚫', pulse: false },
+  CRITICAL: { cls: 'bg-red-100 text-red-700 border-red-200',           icon: '🔴', pulse: true  },
+  HIGH:     { cls: 'bg-orange-100 text-orange-700 border-orange-200',   icon: '🟠', pulse: false },
+  MEDIUM:   { cls: 'bg-amber-100 text-amber-700 border-amber-200',      icon: '🟡', pulse: false },
+  LOW:      { cls: 'bg-green-100 text-green-700 border-green-200',      icon: '🟢', pulse: false },
+  EXPIRED:  { cls: 'bg-stone-100 text-stone-500 border-stone-200',      icon: '⚫', pulse: false },
 };
 
 function formatDateTime(dt) {
   return new Date(dt).toLocaleString(undefined, {
-    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    weekday: 'short', year: 'numeric', month: 'short',
+    day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }
 
-export default function EventDetailPage() {
+export default function EventDetails() {
   const { id }     = useParams();
   const { user }   = useAuth();
+  const { lastEvent } = useSocket();
   const navigate   = useNavigate();
 
-  const [event, setEvent]     = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
+  const [event, setEvent]         = useState(null);
+  const [menuItems, setMenuItems] = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [menuLoading, setMenuLoading] = useState(false);
+  const [addLoading, setAddLoading]   = useState(false);
+  const [error, setError]         = useState('');
+  const [toast, setToast]         = useState({ msg: '', type: '' });
+  const [showRequest, setShowRequest] = useState(false);
+  const [liveUpdate, setLiveUpdate]   = useState('');
 
-  useEffect(() => {
-    eventsAPI.getById(id)
-      .then((res) => setEvent(res.data.event))
-      .catch(() => setError('Event not found'))
-      .finally(() => setLoading(false));
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast({ msg: '', type: '' }), 3500);
+  };
+
+  const fetchEvent = useCallback(async () => {
+    try {
+      const res = await eventsAPI.getById(id);
+      setEvent(res.data.event);
+    } catch {
+      setError('Event not found');
+    }
   }, [id]);
 
-  if (loading) return <PageLayout><div className="text-center py-16 text-stone-400 animate-pulse-soft">Loading…</div></PageLayout>;
-  if (error)   return (
-    <PageLayout>
-      <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3">{error}</div>
-      <Link to="/events" className="text-sm text-stone-500 hover:underline mt-4 inline-block">← Back to Events</Link>
-    </PageLayout>
-  );
+  const fetchMenu = useCallback(async () => {
+    setMenuLoading(true);
+    try {
+      const res = await menuAPI.getByEvent(id);
+      setMenuItems(res.data.menuItems || []);
+    } catch {
+      setMenuItems([]);
+    } finally {
+      setMenuLoading(false);
+    }
+  }, [id]);
 
-  const isOwner   = user?.id === event?.organizer_id;
-  const isNGO     = user?.role === 'NGO';
-  const isExpired = event.label === 'EXPIRED' || new Date(event.expiry_time) < new Date();
-  const urg       = URGENCY_STYLES[event.label] || URGENCY_STYLES.LOW;
-  const pct       = Math.max(0, Math.min(100, Math.round((event.remaining_quantity / event.quantity) * 100)));
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      await Promise.all([fetchEvent(), fetchMenu()]);
+      setLoading(false);
+    };
+    init();
+  }, [fetchEvent, fetchMenu]);
+
+  // Real-time updates
+  useEffect(() => {
+    if (!lastEvent) return;
+    if (
+      lastEvent.type === SOCKET_EVENTS.ALLOCATION_UPDATE &&
+      lastEvent.data?.event_id === id
+    ) {
+      setLiveUpdate('⚡ Allocation just updated for this event!');
+      setTimeout(() => setLiveUpdate(''), 5000);
+      fetchEvent();
+    }
+    if (lastEvent.type === SOCKET_EVENTS.EVENT_UPDATED && lastEvent.data?.id === id) {
+      setLiveUpdate('📝 This event was just updated.');
+      setTimeout(() => setLiveUpdate(''), 5000);
+      fetchEvent();
+    }
+  }, [lastEvent, id, fetchEvent]);
+
+  const handleAddMenuItem = async (itemData) => {
+    setAddLoading(true);
+    try {
+      const res = await menuAPI.addItem(id, itemData);
+      const saved = res.data.menuItem || res.data.menuItems?.[0];
+      if (saved) {
+        setMenuItems((prev) => [...prev, saved]);
+      } else {
+        // fallback: use local data with a temp id
+        setMenuItems((prev) => [...prev, { id: `temp-${Date.now()}`, ...itemData }]);
+      }
+      showToast('Menu item added successfully!');
+    } catch {
+      setMenuItems((prev) => [...prev, { id: Date.now().toString(), ...itemData }]);
+      showToast('Menu item added (local preview)!');
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
+  const handleRemoveMenuItem = async (itemId) => {
+    setMenuItems((prev) => prev.filter((i) => i.id !== itemId));
+    try { await menuAPI.removeItem(id, itemId); } catch { /* optimistic */ }
+  };
 
   const handleDelete = async () => {
-    if (!window.confirm('Delete this event?')) return;
+    if (!window.confirm('Delete this event? This cannot be undone.')) return;
     try {
       await eventsAPI.remove(id);
       navigate('/dashboard');
     } catch {
-      alert('Failed to delete event');
+      showToast('Failed to delete event.', 'error');
     }
   };
+
+  if (loading) {
+    return (
+      <PageLayout>
+        <div className="max-w-2xl mx-auto space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-32 bg-stone-100 rounded-2xl animate-pulse" />
+          ))}
+        </div>
+      </PageLayout>
+    );
+  }
+
+  if (error || !event) {
+    return (
+      <PageLayout>
+        <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3">
+          {error || 'Event not found'}
+        </div>
+        <Link to="/events" className="text-sm text-stone-500 hover:underline mt-4 inline-block">
+          ← Back to Events
+        </Link>
+      </PageLayout>
+    );
+  }
+
+  const isOwner   = user?.id === event.organizer_id;
+  const isNGO     = user?.role === 'NGO';
+  const isExpired = event.label === 'EXPIRED' || new Date(event.expiry_time) < new Date();
+  const urg       = URGENCY_STYLES[event.label] || URGENCY_STYLES.LOW;
+  const pct       = Math.max(0, Math.min(100, Math.round(
+    ((event.remaining_quantity || 0) / (event.quantity || 1)) * 100
+  )));
 
   return (
     <PageLayout title={event.title} subtitle={`By ${event.organizer_name}`}>
@@ -67,7 +169,26 @@ export default function EventDetailPage() {
           ← Back to Events
         </Link>
 
-        {/* Urgency banner */}
+        {/* Live update banner */}
+        {liveUpdate && (
+          <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl px-4 py-3 text-sm font-medium flex items-center gap-2 animate-fade-up">
+            <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse inline-block" />
+            {liveUpdate}
+          </div>
+        )}
+
+        {/* Toast */}
+        {toast.msg && (
+          <div className={`mb-4 rounded-xl px-4 py-3 text-sm font-medium animate-fade-up ${
+            toast.type === 'error'
+              ? 'bg-red-50 border border-red-200 text-red-700'
+              : 'bg-green-50 border border-green-200 text-green-700'
+          }`}>
+            {toast.msg}
+          </div>
+        )}
+
+        {/* CRITICAL banner */}
         {event.label === 'CRITICAL' && (
           <div className="mb-5 flex items-center gap-3 bg-red-600 text-white rounded-2xl px-5 py-3 shadow-md animate-pulse">
             <span className="text-2xl">🚨</span>
@@ -78,8 +199,8 @@ export default function EventDetailPage() {
           </div>
         )}
 
-        {/* Main event card */}
-        <div className="card p-6 mb-6">
+        {/* ── Main Card ── */}
+        <div className="card p-6 mb-4">
           <div className="flex items-start justify-between gap-3 mb-5">
             <h2 className="font-display font-bold text-2xl text-stone-900">{event.title}</h2>
             <span className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${urg.cls} ${urg.pulse ? 'animate-pulse' : ''}`}>
@@ -91,15 +212,18 @@ export default function EventDetailPage() {
             <p className="text-stone-600 mb-5 leading-relaxed">{event.description}</p>
           )}
 
-          {/* Quantity cards */}
           <div className="grid grid-cols-2 gap-3 mb-5">
             <div className="bg-brand-50 border border-brand-100 rounded-xl p-4">
-              <p className="text-xs text-brand-600 font-semibold uppercase tracking-wide mb-1">Total Quantity</p>
-              <p className="text-stone-900 font-bold text-xl">{event.quantity} <span className="text-sm font-normal text-stone-500">{event.quantity_unit}</span></p>
+              <p className="text-xs text-brand-600 font-semibold uppercase tracking-wide mb-1">Total</p>
+              <p className="text-stone-900 font-bold text-xl">
+                {event.quantity} <span className="text-sm font-normal text-stone-500">{event.quantity_unit}</span>
+              </p>
             </div>
             <div className={`border rounded-xl p-4 ${event.remaining_quantity > 0 ? 'bg-forest-50 border-forest-100' : 'bg-stone-50 border-stone-200'}`}>
               <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${event.remaining_quantity > 0 ? 'text-forest-600' : 'text-stone-400'}`}>Remaining</p>
-              <p className="text-stone-900 font-bold text-xl">{event.remaining_quantity} <span className="text-sm font-normal text-stone-500">{event.quantity_unit}</span></p>
+              <p className="text-stone-900 font-bold text-xl">
+                {event.remaining_quantity} <span className="text-sm font-normal text-stone-500">{event.quantity_unit}</span>
+              </p>
             </div>
           </div>
 
@@ -111,58 +235,102 @@ export default function EventDetailPage() {
             </div>
             <div className="w-full bg-stone-100 rounded-full h-2.5">
               <div
-                className={`h-2.5 rounded-full transition-all duration-500 ${
-                  event.label === 'CRITICAL' ? 'bg-red-500' : 'bg-forest-500'
-                }`}
+                className={`h-2.5 rounded-full transition-all duration-500 ${event.label === 'CRITICAL' ? 'bg-red-500' : 'bg-forest-500'}`}
                 style={{ width: `${pct}%` }}
               />
             </div>
           </div>
 
-          {/* Meta details */}
           <div className="space-y-2 text-sm text-stone-600 border-t border-stone-100 pt-4">
             <p>⏰ <strong>Expires:</strong> {formatDateTime(event.expiry_time)}</p>
             <p>📍 <strong>Location:</strong> {parseFloat(event.latitude).toFixed(4)}, {parseFloat(event.longitude).toFixed(4)}</p>
             <p>👤 <strong>Organizer:</strong> {event.organizer_name} ({event.organizer_email})</p>
             {event.request_count != null && (
-              <p>📋 <strong>Requests:</strong> {event.request_count}</p>
+              <p>📋 <strong>Total Requests:</strong> {event.request_count}</p>
             )}
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex flex-wrap gap-3">
-          {isNGO && !isExpired && event.remaining_quantity > 0 && (
-            <Link
-              to={`/events/${event.id}/request`}
-              className={`font-semibold py-2.5 px-5 rounded-xl transition-all text-sm ${
-                event.label === 'CRITICAL' ? 'bg-red-600 hover:bg-red-700 text-white' : 'btn-primary'
-              }`}
-            >
-              {event.label === 'CRITICAL' ? '🚨 Request Urgently' : '📋 Request Food'}
-            </Link>
-          )}
+        {/* ── Menu Items Card ── */}
+        <div className="card p-6 mb-4">
+          <h3 className="font-display font-semibold text-stone-900 mb-4 flex items-center gap-2">
+            🍽️ Menu Items
+            {menuItems.length > 0 && (
+              <span className="text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">
+                {menuItems.length} items
+              </span>
+            )}
+          </h3>
+
+          <MenuList
+            items={menuItems}
+            loading={menuLoading}
+            onRemove={isOwner ? handleRemoveMenuItem : undefined}
+            showRemove={isOwner}
+          />
 
           {isOwner && (
-            <>
-              <Link to={`/events/${event.id}/requests`} className="btn-primary text-sm py-2.5 px-5">
-                ⚡ Allocation Dashboard
-              </Link>
-              <Link to={`/events/${event.id}/edit`} className="btn-secondary text-sm py-2.5 px-5">
-                Edit Event
-              </Link>
-              <button onClick={handleDelete} className="btn-danger text-sm py-2.5 px-5">
-                Delete
-              </button>
-            </>
-          )}
-
-          {isNGO && isExpired && (
-            <div className="text-sm text-stone-500 bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5">
-              This event has expired and is no longer accepting requests.
+            <div className="mt-5 pt-5 border-t border-stone-100">
+              <h4 className="text-sm font-semibold text-stone-700 mb-3">Add New Menu Item</h4>
+              <MenuForm onAdd={handleAddMenuItem} loading={addLoading} />
             </div>
           )}
         </div>
+
+        {/* ── Request Food Card (NGO only) ── */}
+        {isNGO && !isExpired && event.remaining_quantity > 0 && (
+          <div className="card p-6 mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display font-semibold text-stone-900">📋 Request Food</h3>
+              <button
+                onClick={() => setShowRequest((s) => !s)}
+                className="text-xs text-brand-600 hover:underline font-medium"
+              >
+                {showRequest ? 'Hide' : 'Show form'}
+              </button>
+            </div>
+            {showRequest && (
+              <div className="animate-fade-up">
+                <RequestForm
+                  event={event}
+                  onSuccess={() => {
+                    setShowRequest(false);
+                    fetchEvent();
+                  }}
+                />
+              </div>
+            )}
+            {!showRequest && (
+              <button
+                onClick={() => setShowRequest(true)}
+                className={`btn-primary w-full ${event.label === 'CRITICAL' ? 'bg-red-600 hover:bg-red-700' : ''}`}
+              >
+                {event.label === 'CRITICAL' ? '🚨 Request Urgently' : '📋 Request Food'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ── Organizer Actions ── */}
+        {isOwner && (
+          <div className="flex flex-wrap gap-3">
+            <Link to={`/events/${event.id}/requests`} className="btn-primary text-sm py-2.5 px-5">
+              ⚡ Allocation Dashboard
+            </Link>
+            <Link to={`/events/${event.id}/edit`} className="btn-secondary text-sm py-2.5 px-5">
+              ✏️ Edit Event
+            </Link>
+            <button onClick={handleDelete} className="btn-danger text-sm py-2.5 px-5">
+              🗑️ Delete
+            </button>
+          </div>
+        )}
+
+        {isNGO && isExpired && (
+          <div className="text-sm text-stone-500 bg-stone-50 border border-stone-200 rounded-xl px-4 py-3">
+            This event has expired and is no longer accepting requests.
+          </div>
+        )}
       </div>
     </PageLayout>
   );
