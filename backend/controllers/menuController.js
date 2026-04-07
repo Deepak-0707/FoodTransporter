@@ -4,7 +4,7 @@
 // ============================================================
 
 const pool = require('../config/db');
-const { computeMenuItemPriority, sortMenuItemsByPriority } = require('../services/priorityService');
+const { computeMenuItemPriority } = require('../services/priorityService'); // ✅ removed unused sortMenuItemsByPriority
 const { sendUrgentFoodAlert } = require('../services/notificationService');
 
 // ─────────────────────────────────────────────────────────────
@@ -68,7 +68,6 @@ const addMenuItem = async (req, res) => {
       );
 
       const newItem = result.rows[0];
-
       inserted.push({ ...newItem, urgency_label: urgencyLabel });
     }
 
@@ -87,8 +86,8 @@ const addMenuItem = async (req, res) => {
 
     res.status(201).json({
       message: `${inserted.length} item(s) added`,
-      menuItem: inserted[0],   // single-item convenience (used by EventDetails)
-      menuItems: inserted,     // bulk convenience
+      menuItem: inserted[0],
+      menuItems: inserted,
     });
 
   } catch (err) {
@@ -164,15 +163,10 @@ const removeMenuItem = async (req, res) => {
     );
 
     if (!result.rows.length) {
-      return res.status(404).json({
-        error: 'Item not found or access denied',
-      });
+      return res.status(404).json({ error: 'Item not found or access denied' });
     }
 
-    res.json({
-      message: 'Menu item removed',
-      item: result.rows[0],
-    });
+    res.json({ message: 'Menu item removed', item: result.rows[0] });
 
   } catch (err) {
     console.error('Delete menu error:', err.message);
@@ -180,11 +174,4 @@ const removeMenuItem = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────
-// EXPORTS
-// ─────────────────────────────────────────────────────────────
-module.exports = {
-  addMenuItem,
-  getMenuItems,
-  removeMenuItem,
-};
+module.exports = { addMenuItem, getMenuItems, removeMenuItem };

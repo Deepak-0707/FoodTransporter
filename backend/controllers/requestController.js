@@ -21,7 +21,6 @@ const createRequest = async (req, res) => {
     return res.status(400).json({ error: 'quantity_requested must be a positive integer' });
   }
 
-  // Validate selected_items if provided
   if (selected_items && !Array.isArray(selected_items)) {
     return res.status(400).json({ error: 'selected_items must be an array' });
   }
@@ -68,7 +67,6 @@ const createRequest = async (req, res) => {
       return res.status(409).json({ error: 'You already requested this event' });
     }
 
-    // Check if selected_items column exists (safe without migration)
     const colCheck = await client.query(`
       SELECT 1 FROM information_schema.columns
       WHERE table_name='requests' AND column_name='selected_items'
@@ -143,7 +141,6 @@ const getEventRequests = async (req, res) => {
       return res.status(404).json({ error: 'Event not found' });
     }
 
-    // Graceful degradation: check if new columns exist before querying them
     const colCheck = await pool.query(`
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'requests'
@@ -168,7 +165,7 @@ const getEventRequests = async (req, res) => {
     const safeParseJSON = (val) => {
       if (!val) return [];
       if (Array.isArray(val)) return val;
-      try { return JSON.parse(val); } catch (_) { return []; }
+      try { return JSON.parse(val); } catch { return []; } // ✅ removed unused _ binding
     };
 
     const requests = result.rows.map(row => ({
@@ -177,7 +174,6 @@ const getEventRequests = async (req, res) => {
       allocated_items: safeParseJSON(row.allocated_items),
     }));
 
-    // Build summary
     const summary = {
       total_requests: requests.length,
       pending:  requests.filter(r => r.status === 'PENDING').length,
@@ -214,7 +210,11 @@ const allocateEvent = async (req, res) => {
 
     const result = await runAllocationForEvent(event_id);
 
-    try { emitAllocationUpdate(event_id, result); } catch (_) {}
+    try {
+      emitAllocationUpdate(event_id, result);
+    } catch { // ✅ removed unused _ binding; added body to fix no-empty error
+      // Socket emit is non-critical — failure is intentionally ignored
+    }
 
     res.json({ message: 'Allocation completed', ...result });
   } catch (err) {
@@ -278,7 +278,6 @@ const updateRequestAllocation = async (req, res) => {
       return res.status(400).json({ error: 'Not enough food remaining' });
     }
 
-    // Check if allocated_items column exists (safe without migration)
     const colCheck2 = await client.query(`
       SELECT 1 FROM information_schema.columns
       WHERE table_name='requests' AND column_name='allocated_items'
@@ -316,7 +315,6 @@ const updateRequestAllocation = async (req, res) => {
   }
 };
 
-// ✅ SINGLE EXPORT AT END
 module.exports = {
   createRequest,
   getMyRequests,
