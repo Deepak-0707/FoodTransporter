@@ -16,8 +16,8 @@
 // Falls back to proportional-by-requested-qty if no location data.
 // ============================================================
 
-const pool                    = require('../config/db');
-const { haversineDistance }   = require('./distanceService');
+const pool                     = require('../config/db');
+const { haversineDistance }    = require('./distanceService');
 const { emitAllocationUpdate } = require('../realtime/socket');
 
 /**
@@ -49,25 +49,20 @@ function computeSmartAllocations(pendingRequests, available, eventLat, eventLng,
   const safePriority = maxPriority > 0 ? maxPriority : 0.001;
 
   const shares = pendingRequests.map((r) => {
-    // Use distance-based weight if NGO has location, else fall back to request size
     let weight;
     if (r.lat && r.lng && eventLat && eventLng) {
       const dist = haversineDistance(parseFloat(r.lat), parseFloat(r.lng), eventLat, eventLng);
-      // Avoid division by zero for co-located NGO
       const safeDist = dist < 0.01 ? 0.01 : dist;
-      // weight = (1/distance) * priority_score — closer + higher priority = larger share
       weight = (1 / safeDist) * safePriority;
     } else {
       // Fallback: weight proportional to quantity_requested
       weight = r.quantity_requested;
     }
-
     return { ...r, weight };
   });
 
   const totalWeight = shares.reduce((s, r) => s + r.weight, 0);
 
-  // Compute exact floating-point share proportional to weight
   const withShares = shares.map((r) => {
     const exact = (r.weight / totalWeight) * available;
     return { ...r, exact, floor: Math.floor(exact), fractional: exact - Math.floor(exact) };
@@ -75,7 +70,7 @@ function computeSmartAllocations(pendingRequests, available, eventLat, eventLng,
 
   // Largest Remainder Method for integer remainder units
   const totalFloor = withShares.reduce((s, r) => s + r.floor, 0);
-  let remainder    = available - totalFloor;
+  const remainder  = available - totalFloor;
 
   withShares.sort((a, b) => b.fractional - a.fractional);
 
@@ -88,6 +83,20 @@ function computeSmartAllocations(pendingRequests, available, eventLat, eventLng,
       status: allocated > 0 ? 'APPROVED' : 'REJECTED',
     };
   });
+}
+
+/**
+ * computeAllocations
+ * ------------------
+ * CI-test-friendly alias for computeSmartAllocations.
+ * Omits location/priority args — triggers quantity-proportional fallback.
+ *
+ * @param {Array}  pendingRequests - [{ id, ngo_id, quantity_requested }]
+ * @param {number} available       - total food available
+ * @returns {Array}                - [{ request_id, ngo_id, allocated_quantity, status }]
+ */
+function computeAllocations(pendingRequests, available) {
+  return computeSmartAllocations(pendingRequests, available, null, null, 1);
 }
 
 /**
@@ -117,9 +126,9 @@ async function runAllocationForEvent(eventId, pgClient = null) {
 
     if (!eventResult.rows.length) throw new Error(`Event ${eventId} not found`);
 
-    const event    = eventResult.rows[0];
-    const eventLat = parseFloat(event.latitude);
-    const eventLng = parseFloat(event.longitude);
+    const event     = eventResult.rows[0];
+    const eventLat  = parseFloat(event.latitude);
+    const eventLng  = parseFloat(event.longitude);
     const available = parseInt(event.remaining_quantity, 10);
 
     // Fetch PENDING requests, JOIN users for location data
@@ -144,10 +153,12 @@ async function runAllocationForEvent(eventId, pgClient = null) {
        FROM menu_items WHERE event_id = $1`,
       [eventId]
     );
-    const minWaste = parseFloat(priorityResult.rows[0]?.min_waste) || 240;
+    const minWaste    = parseFloat(priorityResult.rows[0]?.min_waste) || 240;
     const maxPriority = minWaste > 0 ? 1 / minWaste : 0.001;
 
-    const allocations = computeSmartAllocations(pendingRequests, available, eventLat, eventLng, maxPriority);
+    const allocations = computeSmartAllocations(
+      pendingRequests, available, eventLat, eventLng, maxPriority
+    );
 
     if (!allocations.length) {
       if (ownClient) await client.query('COMMIT');
@@ -182,8 +193,11 @@ async function runAllocationForEvent(eventId, pgClient = null) {
     );
 
     // Emit realtime update to event room (non-fatal if socket not ready)
-    try { emitAllocationUpdate(eventId, result); }
-    catch (e) { console.warn('[Allocation] Socket emit failed:', e.message); }
+    try {
+      emitAllocationUpdate(eventId, result);
+    } catch (e) {
+      console.warn('[Allocation] Socket emit failed:', e.message);
+    }
 
     return result;
   } catch (err) {
@@ -213,9 +227,17 @@ async function runAllocationForAllEvents() {
   console.log(`[CronJob] Running allocation for ${eventIds.length} event(s)`);
 
   for (const eventId of eventIds) {
-    try { await runAllocationForEvent(eventId); }
-    catch (err) { console.error(`[CronJob] Failed for event ${eventId}:`, err.message); }
+    try {
+      await runAllocationForEvent(eventId);
+    } catch (err) {
+      console.error(`[CronJob] Failed for event ${eventId}:`, err.message);
+    }
   }
 }
 
-module.exports = { computeSmartAllocations, runAllocationForEvent, runAllocationForAllEvents };
+module.exports = {
+  computeAllocations,       // ✅ alias used by CI unit tests (no location args)
+  computeSmartAllocations,  // full weighted algorithm used internally
+  runAllocationForEvent,
+  runAllocationForAllEvents,
+};
