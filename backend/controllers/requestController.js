@@ -21,7 +21,6 @@ const createRequest = async (req, res) => {
     return res.status(400).json({ error: 'quantity_requested must be a positive integer' });
   }
 
-  // Validate selected_items if provided
   if (selected_items && !Array.isArray(selected_items)) {
     return res.status(400).json({ error: 'selected_items must be an array' });
   }
@@ -59,7 +58,7 @@ const createRequest = async (req, res) => {
     }
 
     const dupCheck = await client.query(
-      `SELECT id, status FROM requests WHERE ngo_id = $1 AND event_id = $2`,
+      `SELECT id FROM requests WHERE ngo_id = $1 AND event_id = $2`,
       [ngo_id, event_id]
     );
 
@@ -68,7 +67,6 @@ const createRequest = async (req, res) => {
       return res.status(409).json({ error: 'You already requested this event' });
     }
 
-    // Check if selected_items column exists (safe without migration)
     const colCheck = await client.query(`
       SELECT 1 FROM information_schema.columns
       WHERE table_name='requests' AND column_name='selected_items'
@@ -106,9 +104,7 @@ const createRequest = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────
 // GET /requests/my
-// ─────────────────────────────────────────────────────────────
 const getMyRequests = async (req, res) => {
   const ngo_id = req.user.id;
   try {
@@ -126,9 +122,7 @@ const getMyRequests = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────
 // GET /events/:id/requests
-// ─────────────────────────────────────────────────────────────
 const getEventRequests = async (req, res) => {
   const { id: event_id } = req.params;
   const organizer_id = req.user.id;
@@ -143,21 +137,18 @@ const getEventRequests = async (req, res) => {
       return res.status(404).json({ error: 'Event not found' });
     }
 
-    // Graceful degradation: check if new columns exist before querying them
     const colCheck = await pool.query(`
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'requests'
         AND column_name IN ('selected_items', 'allocated_items')
     `);
+
     const existingCols = new Set(colCheck.rows.map(r => r.column_name));
-    const siCol = existingCols.has('selected_items')  ? 'r.selected_items'  : 'NULL AS selected_items';
+    const siCol = existingCols.has('selected_items') ? 'r.selected_items' : 'NULL AS selected_items';
     const aiCol = existingCols.has('allocated_items') ? 'r.allocated_items' : 'NULL AS allocated_items';
 
     const result = await pool.query(
-      `SELECT r.id, r.ngo_id, r.event_id, r.quantity_requested, r.allocated_quantity,
-              r.status, r.note, r.created_at,
-              ${siCol}, ${aiCol},
-              u.name AS ngo_name, u.email AS ngo_email
+      `SELECT r.*, ${siCol}, ${aiCol}, u.name AS ngo_name, u.email AS ngo_email
        FROM requests r
        JOIN users u ON r.ngo_id = u.id
        WHERE r.event_id = $1
@@ -168,7 +159,7 @@ const getEventRequests = async (req, res) => {
     const safeParseJSON = (val) => {
       if (!val) return [];
       if (Array.isArray(val)) return val;
-      try { return JSON.parse(val); } catch (_) { return []; }
+      try { return JSON.parse(val); } catch (err) { return []; }
     };
 
     const requests = result.rows.map(row => ({
@@ -177,14 +168,14 @@ const getEventRequests = async (req, res) => {
       allocated_items: safeParseJSON(row.allocated_items),
     }));
 
-    // Build summary
     const summary = {
       total_requests: requests.length,
-      pending:  requests.filter(r => r.status === 'PENDING').length,
+      pending: requests.filter(r => r.status === 'PENDING').length,
       approved: requests.filter(r => r.status === 'APPROVED').length,
       rejected: requests.filter(r => r.status === 'REJECTED').length,
       total_requested: requests.reduce((s, r) => s + (r.quantity_requested || 0), 0),
-      total_allocated: requests.filter(r => r.status === 'APPROVED').reduce((s, r) => s + (r.allocated_quantity || 0), 0),
+      total_allocated: requests.filter(r => r.status === 'APPROVED')
+        .reduce((s, r) => s + (r.allocated_quantity || 0), 0),
       food_remaining: eventCheck.rows[0].remaining_quantity,
     };
 
@@ -195,9 +186,7 @@ const getEventRequests = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────
 // POST /events/:id/allocate
-// ─────────────────────────────────────────────────────────────
 const allocateEvent = async (req, res) => {
   const { id: event_id } = req.params;
   const organizer_id = req.user.id;
@@ -214,7 +203,11 @@ const allocateEvent = async (req, res) => {
 
     const result = await runAllocationForEvent(event_id);
 
-    try { emitAllocationUpdate(event_id, result); } catch (_) {}
+    try {
+      emitAllocationUpdate(event_id, result);
+    } catch (err) {
+      console.error('Socket emit failed:', err.message);
+    }
 
     res.json({ message: 'Allocation completed', ...result });
   } catch (err) {
@@ -223,9 +216,7 @@ const allocateEvent = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────
 // PUT /events/:eventId/requests/:requestId
-// ─────────────────────────────────────────────────────────────
 const updateRequestAllocation = async (req, res) => {
   const { id: event_id, requestId } = req.params;
   const organizer_id = req.user.id;
@@ -278,11 +269,11 @@ const updateRequestAllocation = async (req, res) => {
       return res.status(400).json({ error: 'Not enough food remaining' });
     }
 
-    // Check if allocated_items column exists (safe without migration)
     const colCheck2 = await client.query(`
       SELECT 1 FROM information_schema.columns
       WHERE table_name='requests' AND column_name='allocated_items'
     `);
+
     const hasAllocItemsCol = colCheck2.rows.length > 0;
 
     let updated;
@@ -316,7 +307,6 @@ const updateRequestAllocation = async (req, res) => {
   }
 };
 
-// ✅ SINGLE EXPORT AT END
 module.exports = {
   createRequest,
   getMyRequests,
