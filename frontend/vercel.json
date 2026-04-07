@@ -1,8 +1,5 @@
 {
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
-  "env": {
-    "VITE_API_URL": "@foodbridge_api_url"
-  },
   "headers": [
     {
       "source": "/(.*)",
