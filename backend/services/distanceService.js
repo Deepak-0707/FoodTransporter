@@ -1,3 +1,6 @@
+// services/distanceService.js
+// Haversine formula for calculating distance between two geographic coordinates
+
 const EARTH_RADIUS_KM = 6371;
 
 function toRadians(degrees) {

@@ -36,6 +36,7 @@ export default {
       animation: {
         'fade-up': 'fadeUp 0.5s ease forwards',
         'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
+        'bell-shake':   'bellShake 0.6s ease-in-out',
       },
       keyframes: {
         fadeUp: {
@@ -45,6 +46,14 @@ export default {
         pulseSoft: {
           '0%, 100%': { opacity: '1' },
           '50%':      { opacity: '0.6' },
+        },
+        bellShake: {
+          '0%, 100%': { transform: 'rotate(0deg)' },
+          '15%':      { transform: 'rotate(15deg)' },
+          '30%':      { transform: 'rotate(-10deg)' },
+          '45%':      { transform: 'rotate(10deg)' },
+          '60%':      { transform: 'rotate(-5deg)' },
+          '75%':      { transform: 'rotate(5deg)' },
         },
       },
     },

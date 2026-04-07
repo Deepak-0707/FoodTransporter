@@ -1,29 +1,30 @@
-// src/components/Navbar.jsx — Phase 3
+// src/components/Navbar.jsx — Phase 4: with NotificationBell + socket indicator
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
+import NotificationBell from './NotificationBell';
 
 export default function Navbar() {
-  const { user, logout } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
+  const { user, logout }  = useAuth();
+  const { connected }     = useSocket();
+  const location          = useLocation();
+  const navigate          = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = () => { logout(); navigate('/login'); };
-
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
 
   const ngoLinks = [
     { to: '/dashboard', label: 'Dashboard' },
-    { to: '/events',    label: 'Events' },
-    { to: '/requests',  label: 'My Requests' },
-    { to: '/map',       label: 'Map' },
+    { to: '/events',    label: 'Events'    },
+    { to: '/requests',  label: 'Requests'  },
+    { to: '/map',       label: 'Map'       },
   ];
-
   const organizerLinks = [
     { to: '/dashboard', label: 'Dashboard' },
-    { to: '/events',    label: 'Events' },
-    { to: '/map',       label: 'Map' },
+    { to: '/events',    label: 'Events'    },
+    { to: '/map',       label: 'Map'       },
   ];
 
   const links = user?.role === 'NGO' ? ngoLinks : organizerLinks;
@@ -54,7 +55,13 @@ export default function Navbar() {
               ))}
             </div>
 
-            <div className="flex items-center gap-3 ml-auto">
+            <div className="flex items-center gap-2 ml-auto">
+              {/* Socket connection indicator */}
+              <div className="hidden sm:flex items-center gap-1.5" title={connected ? 'Real-time connected' : 'Real-time disconnected'}>
+                <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-stone-300'}`} />
+                <span className="text-xs text-stone-400">{connected ? 'Live' : 'Offline'}</span>
+              </div>
+
               <span className="hidden sm:inline text-xs text-stone-400 font-medium">
                 {user.name} · <span className={user.role === 'ORGANIZER' ? 'text-brand-600' : 'text-forest-600'}>{user.role}</span>
               </span>
@@ -65,10 +72,10 @@ export default function Navbar() {
                 </Link>
               )}
 
-              <button
-                onClick={handleLogout}
-                className="text-xs text-stone-500 hover:text-stone-700 font-medium"
-              >
+              {/* Notification bell */}
+              <NotificationBell />
+
+              <button onClick={handleLogout} className="text-xs text-stone-500 hover:text-stone-700 font-medium">
                 Logout
               </button>
 
@@ -104,6 +111,11 @@ export default function Navbar() {
               + New Event
             </Link>
           )}
+          {/* Mobile socket status */}
+          <div className="flex items-center gap-2 px-3 py-2">
+            <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-stone-300'}`} />
+            <span className="text-xs text-stone-400">{connected ? 'Live updates active' : 'No live updates'}</span>
+          </div>
         </div>
       )}
     </nav>

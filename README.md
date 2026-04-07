@@ -1,330 +1,273 @@
-# 🍱 FoodBridge — Phase 1
+# 🌉 FoodBridge — Phase 4
 
-> Connecting event organizers and NGOs to reduce food wastage.
-
-FoodBridge is a full-stack web application where **Organizers** post surplus food from events and **NGOs** find and collect it before it expires.
-
----
-
-## Table of Contents
-
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Quick Start (Local)](#quick-start-local)
-- [Environment Variables](#environment-variables)
-- [Database Setup (Supabase)](#database-setup-supabase)
-- [Running with Docker](#running-with-docker)
-- [Deployment](#deployment)
-  - [Backend → Render](#backend--render)
-  - [Frontend → Vercel](#frontend--vercel)
-- [API Reference](#api-reference)
-- [CI/CD](#cicd)
+> Connecting surplus food from events to NGOs that need it most.  
+> Real-time allocation, Socket.io notifications, smart priority engine.
 
 ---
 
-## Features
+## Architecture
 
-### Authentication
-- Register and login with **JWT** (7-day tokens)
-- Two roles: **ORGANIZER** and **NGO**
-- Passwords hashed with **bcrypt** (10 salt rounds)
+```
+/foodbridge
+├── backend/          Express API + Socket.io + PostgreSQL
+├── frontend/         React + Vite + Tailwind + Socket.io-client
+├── docker-compose.yml
+├── schema.sql        Full DB schema (run once in Supabase / Postgres)
+├── render.yaml       Render Blueprint for backend deployment
+└── README.md
+```
 
-### Organizer
-- Create food surplus events with title, description, location (lat/lng), quantity, and expiry time
-- View, edit, and delete your own events
-- Role-based dashboard showing your events and stats
-
-### NGO
-- Browse all available events
-- View event details including organizer contact
-- Map view to find nearby pickups
-
-### Map
-- Interactive **Leaflet + OpenStreetMap** map
-- Custom colour-coded markers (green = available, orange = expiring soon, red = critical, grey = expired)
-- Popup with event title, quantity, and expiry time
-- Click-through to full event detail
-
----
-
-## Tech Stack
+### Tech Stack
 
 | Layer      | Technology                          |
 |------------|-------------------------------------|
 | Frontend   | React 18, Vite, Tailwind CSS        |
-| Backend    | Node.js, Express                    |
-| Database   | PostgreSQL via **Supabase**         |
-| Auth       | JWT + bcrypt                        |
-| Maps       | Leaflet + OpenStreetMap             |
-| DevOps     | Docker, GitHub Actions              |
-| Hosting    | Render (backend), Vercel (frontend) |
+| API Client | Axios (with JWT interceptor)        |
+| Realtime   | Socket.io-client                    |
+| Backend    | Node.js, Express 4                  |
+| Realtime   | Socket.io 4                         |
+| Database   | PostgreSQL (Supabase recommended)   |
+| Auth       | JWT (jsonwebtoken + bcryptjs)       |
+| Deployment | Vercel (frontend) + Render (backend)|
 
 ---
 
-## Project Structure
-
-```
-foodbridge/
-├── backend/
-│   ├── config/
-│   │   └── db.js              # PostgreSQL connection pool
-│   ├── controllers/
-│   │   ├── authController.js  # register, login
-│   │   └── eventController.js # CRUD for events
-│   ├── middleware/
-│   │   └── auth.js            # JWT verify + role guard
-│   ├── routes/
-│   │   ├── auth.js
-│   │   └── events.js
-│   ├── server.js              # Express app entry point
-│   ├── Dockerfile
-│   ├── .env.example
-│   └── package.json
-│
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── EventCard.jsx
-│   │   │   ├── EventForm.jsx
-│   │   │   ├── Navbar.jsx
-│   │   │   └── PageLayout.jsx
-│   │   ├── context/
-│   │   │   └── AuthContext.jsx
-│   │   ├── pages/
-│   │   │   ├── LoginPage.jsx
-│   │   │   ├── RegisterPage.jsx
-│   │   │   ├── DashboardPage.jsx
-│   │   │   ├── EventListPage.jsx
-│   │   │   ├── EventDetailPage.jsx
-│   │   │   ├── CreateEventPage.jsx
-│   │   │   ├── EditEventPage.jsx
-│   │   │   └── MapViewPage.jsx
-│   │   ├── services/
-│   │   │   └── api.js         # Axios instance + API calls
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   └── index.css
-│   ├── Dockerfile
-│   ├── vercel.json
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   └── package.json
-│
-├── .github/
-│   └── workflows/
-│       └── ci.yml             # GitHub Actions CI pipeline
-├── schema.sql                 # PostgreSQL schema
-├── docker-compose.yml         # Local full-stack runner
-├── render.yaml                # Render deploy blueprint
-└── README.md
-```
-
----
-
-## Quick Start (Local)
+## Local Development
 
 ### Prerequisites
-- Node.js 18+
-- A PostgreSQL database (Supabase free tier recommended)
 
-### 1. Clone the repo
+- Node.js 20+
+- A PostgreSQL database (local or Supabase free tier)
 
-```bash
-git clone https://github.com/your-username/foodbridge.git
-cd foodbridge
-```
+### 1 — Database setup
 
-### 2. Set up the database
+1. Create a free project at [supabase.com](https://supabase.com)
+2. Open **SQL Editor** and paste the contents of `schema.sql`
+3. Click **Run** — all tables are created with safe `IF NOT EXISTS` guards
+4. Copy the connection string from **Settings → Database → Connection string (URI)**
 
-Go to [supabase.com](https://supabase.com), create a free project, then run the schema:
-
-```bash
-# In your Supabase SQL editor, paste and run the contents of:
-schema.sql
-```
-
-Copy the **connection string** from: Project Settings → Database → Connection string → URI.
-
-### 3. Configure backend environment
+### 2 — Backend
 
 ```bash
 cd backend
 cp .env.example .env
-# Edit .env and fill in DATABASE_URL, JWT_SECRET
 ```
 
-### 4. Start the backend
+Edit `.env`:
+```env
+DATABASE_URL=postgresql://...    # from Supabase
+JWT_SECRET=any_long_random_string
+CLIENT_URL=http://localhost:5173
+PORT=5000
+NODE_ENV=development
+```
 
 ```bash
 npm install
-npm run dev
-# API running at http://localhost:5000
+npm run dev      # starts with nodemon on :5000
 ```
 
-### 5. Configure frontend environment
+Verify: `curl http://localhost:5000/health` → `{"status":"ok",...}`
+
+### 3 — Frontend
 
 ```bash
-cd ../frontend
+cd frontend
 cp .env.example .env
-# VITE_API_URL=http://localhost:5000
 ```
 
-### 6. Start the frontend
+`.env` defaults are already correct for local dev:
+```env
+VITE_API_URL=http://localhost:5000
+VITE_SOCKET_URL=http://localhost:5000
+```
 
 ```bash
 npm install
-npm run dev
-# App running at http://localhost:5173
+npm run dev      # starts Vite on :5173
 ```
 
----
-
-## Environment Variables
-
-### Backend (`backend/.env`)
-
-| Variable       | Description                                  | Example                                      |
-|----------------|----------------------------------------------|----------------------------------------------|
-| `PORT`         | Express server port                          | `5000`                                       |
-| `NODE_ENV`     | Environment                                  | `development`                                |
-| `DATABASE_URL` | PostgreSQL connection string                 | `postgresql://user:pass@host:5432/dbname`    |
-| `JWT_SECRET`   | Secret key for signing JWTs                  | `a-very-long-random-string`                  |
-| `CLIENT_URL`   | Frontend URL for CORS                        | `http://localhost:5173`                      |
-
-### Frontend (`frontend/.env`)
-
-| Variable        | Description              | Example                                |
-|-----------------|--------------------------|----------------------------------------|
-| `VITE_API_URL`  | Backend API base URL     | `http://localhost:5000`                |
+Open **http://localhost:5173** — API calls are proxied to `:5000` by Vite.
 
 ---
 
-## Database Setup (Supabase)
-
-1. Create a free project at [supabase.com](https://supabase.com)
-2. Go to **SQL Editor** and run the contents of `schema.sql`
-3. Go to **Project Settings → Database → URI** and copy the connection string
-4. Paste it as `DATABASE_URL` in your backend `.env`
-
-> **Note:** Supabase requires `?sslmode=require` — the backend automatically sets `ssl: { rejectUnauthorized: false }` in production mode.
-
----
-
-## Running with Docker
-
-Make sure Docker and Docker Compose are installed. Create a `backend/.env` file first.
+## Docker (full stack)
 
 ```bash
-# From the project root
+# Fill in DATABASE_URL and JWT_SECRET first
+cp backend/.env.example backend/.env
+nano backend/.env
+
+# Build and start everything
 docker compose up --build
 ```
 
-| Service   | URL                      |
-|-----------|--------------------------|
-| Frontend  | http://localhost:3000    |
-| Backend   | http://localhost:5000    |
+- Frontend → **http://localhost:3000**
+- Backend  → **http://localhost:5000**
 
-To stop:
-```bash
-docker compose down
-```
+> **Note:** `VITE_API_URL` and `VITE_SOCKET_URL` are baked into the
+> frontend bundle at build time. If you need a different backend URL,
+> edit the `args:` section in `docker-compose.yml` and rebuild.
 
 ---
 
-## Deployment
+## Production Deployment
 
-### Backend → Render
+### Step 1 — Database (Supabase)
 
-1. Push your code to GitHub
-2. Go to [render.com](https://render.com) → **New Web Service**
-3. Connect your GitHub repo, set **Root Directory** to `backend`
-4. Set **Build Command:** `npm ci`
-5. Set **Start Command:** `node server.js`
-6. Add environment variables in the Render dashboard:
-   - `DATABASE_URL` — your Supabase connection string
-   - `JWT_SECRET` — a strong random string
-   - `CLIENT_URL` — your Vercel frontend URL (set after frontend deploy)
-   - `NODE_ENV` — `production`
+1. Create project → run `schema.sql` in SQL Editor
+2. Copy the **URI** connection string (Settings → Database)
 
-Or use the **Blueprint** (automatic):
-```bash
-# render.yaml is already configured — just connect your repo in Render
-```
+### Step 2 — Backend (Render)
 
-### Frontend → Vercel
+1. Push the repo to GitHub
+2. Go to [render.com](https://render.com) → **New → Blueprint**
+3. Connect your GitHub repo — Render reads `render.yaml` automatically
+4. In the Render dashboard, set environment variables:
+
+   | Key            | Value                                   |
+   |----------------|-----------------------------------------|
+   | `DATABASE_URL` | Supabase connection string              |
+   | `JWT_SECRET`   | Auto-generated by Render (or set yours) |
+   | `CLIENT_URL`   | `https://your-app.vercel.app`           |
+
+5. Deploy — note your backend URL: `https://foodbridge-backend.onrender.com`
+
+### Step 3 — Frontend (Vercel)
 
 1. Go to [vercel.com](https://vercel.com) → **New Project**
-2. Import your GitHub repo, set **Root Directory** to `frontend`
-3. Framework preset: **Vite**
-4. Add environment variable:
-   - `VITE_API_URL` = your Render backend URL (e.g. `https://foodbridge-backend.onrender.com`)
-5. Deploy
+2. Import your GitHub repo
+3. Set **Root Directory** to `frontend`
+4. Add environment variables:
 
-> After deploying frontend, go back to Render and update `CLIENT_URL` to your Vercel URL.
+   | Key               | Value                                           |
+   |-------------------|-------------------------------------------------|
+   | `VITE_API_URL`    | `https://foodbridge-backend.onrender.com`       |
+   | `VITE_SOCKET_URL` | `https://foodbridge-backend.onrender.com`       |
+
+5. Deploy → Vercel auto-detects Vite
+
+### Step 4 — Update CORS
+
+After you have the Vercel URL, go back to Render and update:
+
+```
+CLIENT_URL=https://foodbridge-backend.onrender.com,https://your-app.vercel.app
+```
+
+The backend accepts comma-separated origins.
+
+---
+
+## Environment Variables Reference
+
+### Backend (`backend/.env`)
+
+| Variable                  | Required | Default              | Description                              |
+|---------------------------|----------|----------------------|------------------------------------------|
+| `DATABASE_URL`            | ✅        | —                    | PostgreSQL connection string             |
+| `JWT_SECRET`              | ✅        | —                    | JWT signing secret (32+ chars)           |
+| `CLIENT_URL`              | ✅        | `http://localhost:5173` | CORS allowed origin(s), comma-separated |
+| `PORT`                    | —        | `5000`               | API server port                          |
+| `NODE_ENV`                | —        | `development`        | `production` disables verbose errors     |
+| `NOTIFY_RADIUS_KM`        | —        | `20`                 | Default notification search radius      |
+| `NOTIFY_DISTANCE_WEIGHT`  | —        | `0.6`                | Weight for distance in notify scoring   |
+| `NOTIFY_URGENCY_WEIGHT`   | —        | `0.4`                | Weight for urgency in notify scoring    |
+
+### Frontend (`frontend/.env`)
+
+| Variable          | Required | Default                  | Description                    |
+|-------------------|----------|--------------------------|--------------------------------|
+| `VITE_API_URL`    | ✅        | `http://localhost:5000`  | Backend REST API base URL      |
+| `VITE_SOCKET_URL` | ✅        | `http://localhost:5000`  | Socket.io server URL           |
 
 ---
 
 ## API Reference
 
 ### Auth
-
-| Method | Endpoint        | Body                              | Auth | Description         |
-|--------|-----------------|-----------------------------------|------|---------------------|
-| POST   | `/auth/register`| `name, email, password, role`     | No   | Create account      |
-| POST   | `/auth/login`   | `email, password`                 | No   | Login, get JWT      |
+| Method | Path              | Auth | Body                                  |
+|--------|-------------------|------|---------------------------------------|
+| POST   | `/auth/register`  | —    | `{ name, email, password, role }`     |
+| POST   | `/auth/login`     | —    | `{ email, password }`                 |
 
 ### Events
+| Method | Path                    | Role       | Notes                        |
+|--------|-------------------------|------------|------------------------------|
+| GET    | `/events`               | Any        | All events, sorted by urgency|
+| GET    | `/events/nearby`        | Any        | `?lat=&lng=&radius=`         |
+| GET    | `/events/:id`           | Any        |                              |
+| POST   | `/events`               | ORGANIZER  |                              |
+| PUT    | `/events/:id`           | ORGANIZER  | Own events only              |
+| DELETE | `/events/:id`           | ORGANIZER  | Own events only              |
+| GET    | `/events/:id/requests`  | ORGANIZER  | + allocation summary         |
+| POST   | `/events/:id/allocate`  | ORGANIZER  | Manual allocation trigger    |
+| GET    | `/events/:id/menu`      | Any        |                              |
+| POST   | `/events/:id/menu`      | ORGANIZER  |                              |
+| DELETE | `/events/:id/menu/:itemId` | ORGANIZER |                           |
 
-| Method | Endpoint        | Body / Query                      | Auth     | Description                    |
-|--------|-----------------|-----------------------------------|----------|--------------------------------|
-| GET    | `/events`       | `?mine=true` (optional)           | Required | List all events                |
-| GET    | `/events/:id`   | —                                 | Required | Get single event               |
-| POST   | `/events`       | `title, latitude, longitude, quantity, expiry_time, [description]` | ORGANIZER | Create event |
-| PUT    | `/events/:id`   | Any event fields                  | ORGANIZER (owner) | Update event |
-| DELETE | `/events/:id`   | —                                 | ORGANIZER (owner) | Delete event |
-| GET    | `/health`       | —                                 | No       | Health check                   |
+### Requests
+| Method | Path            | Role | Notes                  |
+|--------|-----------------|------|------------------------|
+| POST   | `/requests`     | NGO  | Auto-triggers allocation|
+| GET    | `/requests/my`  | NGO  | My requests + status   |
 
-All protected endpoints require:
-```
-Authorization: Bearer <your_jwt_token>
-```
-
-### Response format
-```json
-// Success
-{ "message": "...", "event": { ... } }
-{ "events": [ ... ] }
-
-// Error
-{ "error": "Human-readable error message" }
-```
-
----
-
-## CI/CD
-
-GitHub Actions runs automatically on every push to `main` or `develop`:
-
-1. **Backend job** — installs deps, runs ESLint
-2. **Frontend job** — installs deps, runs ESLint, runs `vite build`, uploads `dist/` as artifact
-3. **Docker job** — builds both Docker images to verify they compile correctly
-
-View workflow: `.github/workflows/ci.yml`
+### Notifications
+| Method | Path                        | Role      |
+|--------|-----------------------------|-----------|
+| GET    | `/notifications`            | Any       |
+| POST   | `/notifications/send`       | ORGANIZER |
+| PUT    | `/notifications/:id/read`   | Any       |
+| PUT    | `/notifications/read-all`   | Any       |
 
 ---
 
-## Roadmap (Phase 2+)
+## Socket.io Events
 
-- [ ] NGO booking / claim system
-- [ ] Real-time notifications (WebSockets)
-- [ ] Email alerts for expiring events
-- [ ] Food splitting across multiple NGOs
-- [ ] Admin dashboard
-- [ ] Mobile app (React Native)
+| Event              | Direction        | Payload                            |
+|--------------------|------------------|------------------------------------|
+| `JOIN_USER_ROOM`   | Client → Server  | `userId`                           |
+| `JOIN_EVENT_ROOM`  | Client → Server  | `eventId`                          |
+| `LEAVE_EVENT_ROOM` | Client → Server  | `eventId`                          |
+| `NEW_EVENT`        | Server → All     | `{ event }`                        |
+| `NEW_NOTIFICATION` | Server → User    | `{ notification }`                 |
+| `ALLOCATION_UPDATE`| Server → Event   | `{ event_id, allocated, results }` |
+| `EVENT_UPDATED`    | Server → All     | `{ event }`                        |
+| `MENU_UPDATED`     | Server → All     | `{ event_id, menuItem }`           |
 
 ---
 
-## License
+## Roles
 
-MIT — free to use and modify.
+| Role        | Permissions                                                   |
+|-------------|---------------------------------------------------------------|
+| `ORGANIZER` | Create/edit/delete events, view requests, trigger allocation, add menu items, send notifications |
+| `NGO`       | Browse events, request food, view own requests & allocations  |
+
+---
+
+## How Allocation Works
+
+1. NGO submits a request → `POST /requests`
+2. System auto-runs the allocation engine for that event
+3. **If total requested ≤ available:** every NGO gets exactly what they asked for
+4. **If over-subscribed:** proportional distribution using the Largest Remainder Method (no food wasted)
+5. Allocation result is broadcast via `ALLOCATION_UPDATE` to all clients watching the event
+6. A background cron re-runs allocation every 5 minutes for any events with pending requests
+
+---
+
+## Integration Fixes Applied (Phase 4)
+
+| # | File | Fix |
+|---|------|-----|
+| 1 | `backend/server.js` | Uses `realtime/socket.js` singleton; CORS supports comma-separated origins |
+| 2 | `backend/routes/events.js` | Menu routes moved **before** `module.exports` so they actually register |
+| 3 | `backend/controllers/requestController.js` | Emits `ALLOCATION_UPDATE` via Socket.io after every allocation |
+| 4 | `frontend/src/services/socket.js` | Uses `VITE_SOCKET_URL` (separate from API URL) |
+| 5 | `frontend/src/context/SocketContext.jsx` | Emits `JOIN_USER_ROOM` on connect for targeted notifications |
+| 6 | `frontend/src/context/NotificationContext.jsx` | Normalises `read_status` → `read` from DB schema |
+| 7 | `frontend/vite.config.js` | Proxies `/notifications`, `/socket.io` (ws:true) in dev |
+| 8 | `frontend/Dockerfile` | Promotes `ARG` to `ENV` before `npm run build` so Vite picks them up |
+| 9 | `schema.sql` | Added `notifications` table + `menu_items` table + user location columns |
+| 10 | `docker-compose.yml` | Passes `VITE_SOCKET_URL` build arg; healthcheck before frontend starts |

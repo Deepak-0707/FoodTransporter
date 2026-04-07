@@ -27,19 +27,23 @@ export default function EventForm({ initialValues = {}, onSubmit, loading, submi
     if (!form.title.trim()) return setError('Title is required');
     if (!form.latitude || !form.longitude) return setError('Latitude and longitude are required');
     if (isNaN(form.latitude) || isNaN(form.longitude)) return setError('Latitude and longitude must be numbers');
-    if (!form.quantity.trim()) return setError('Quantity is required');
+    if (!form.quantity || isNaN(parseInt(form.quantity)) || parseInt(form.quantity) <= 0) return setError('Quantity must be a positive number');
     if (!form.expiry_time) return setError('Expiry time is required');
     if (new Date(form.expiry_time) <= new Date()) return setError('Expiry time must be in the future');
 
     try {
-      await onSubmit(form);
+      await onSubmit({ ...form, expiry_time: new Date(form.expiry_time).toISOString() });
     } catch (err) {
       setError(err.response?.data?.error || 'Something went wrong');
     }
   };
 
-  // Generate a sensible minimum datetime for the expiry picker (now + 30 min)
-  const minDateTime = new Date(Date.now() + 30 * 60000).toISOString().slice(0, 16);
+  // datetime-local needs local time — toISOString() gives UTC which is wrong for non-UTC timezones
+  const localDateTimeString = (date) => {
+    const offset = date.getTimezoneOffset() * 60000;
+    return new Date(date - offset).toISOString().slice(0, 16);
+  };
+  const minDateTime = localDateTimeString(new Date(Date.now() + 30 * 60000));
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
@@ -114,9 +118,12 @@ export default function EventForm({ initialValues = {}, onSubmit, loading, submi
         <label className="text-sm font-semibold text-stone-700">Food Quantity *</label>
         <input
           name="quantity"
+          type="number"
+          min="1"
+          step="1"
           value={form.quantity}
           onChange={handleChange}
-          placeholder="e.g. 50 meals, 20 kg rice, serves ~30 people"
+          placeholder="e.g. 50"
           className="input-field"
           required
         />

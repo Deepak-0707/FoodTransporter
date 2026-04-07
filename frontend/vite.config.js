@@ -27,6 +27,20 @@ export default defineConfig({
         target:'http://localhost:5001',
         changeOrigin:true,
       },
+      '/notifications': {
+        target:      'http://localhost:5001',
+        changeOrigin: true,
+      },
+      // Socket.io — must proxy with ws:true for WebSocket handshake
+      '/socket.io': {
+        target:      'http://localhost:5001',
+        changeOrigin: true,
+        ws:           true,
+      },
     },
+  },
+  build: {
+    outDir:    'dist',
+    sourcemap: false,
   },
 });
