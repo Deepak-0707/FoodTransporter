@@ -1,7 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const { authenticate, requireRole } = require('../middleware/auth');
-const { createBooking, getMyBookings, getEventBookings } = require('../controllers/bookingController');
+const { createBooking, getMyBookings } = require('../controllers/bookingController'); // ✅ removed unused getEventBookings
 
 // All booking routes require authentication
 router.use(authenticate);

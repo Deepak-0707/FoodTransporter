@@ -79,7 +79,8 @@ const login = async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    const { password: _, ...safeUser } = user;
+    // eslint-disable-next-line no-unused-vars
+    const { password: _password, ...safeUser } = user;
     res.json({ message: 'Login successful', token, user: safeUser });
   } catch (err) {
     console.error('Login error:', err.message);
