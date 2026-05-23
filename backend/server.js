@@ -22,10 +22,19 @@ const io = initSocket(server);
 app.set('io', io);
 
 // ─── CORS ────────────────────────────────────────────────────
-const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+// 1. Get origins from .env, defaulting to Vite's local dev server
+const envOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
+
+// 2. Add Capacitor Mobile App origins so they are never blocked
+const allowedOrigins = [
+  ...envOrigins,
+  'https://localhost',     // Capacitor Android default
+  'http://localhost',      // Capacitor Android HTTP fallback
+  'capacitor://localhost'  // Capacitor iOS default
+];
 
 app.use(
   cors({
